@@ -27,7 +27,7 @@ def deconv(net, features = 3, kernel = 3, stride = 2, activation = lrelu,padding
   return tf.layers.conv2d_transpose(net,features,kernel,stride,activation=activation,padding=padding,trainable=trainable,name=name)
 
 def batch_norm(net,training,trainable):
-  with tf.variable_scope('batch_norm') as scope:
+  with tf.variable_scope('batch_norm') as scope:  
     net = tf.layers.batch_normalization(net,training = training, trainable = trainable)
   return net
 
