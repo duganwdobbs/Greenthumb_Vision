@@ -12,8 +12,6 @@ from util            import ImageToPatch
 from util            import PatchToImage
 from tfrecord        import inputs
 from tfrecord        import sizes
-from time            import sleep
-
 
 imgW,imgH,save_stride = sizes()
 
@@ -34,7 +32,8 @@ flags.DEFINE_boolean('advanced_logging' ,False,'If we log metadata and histogram
 flags.DEFINE_integer('num_epochs'       , None                ,'Number of epochs to run trainer.')
 flags.DEFINE_integer('batch_size'       , 1                 ,'Batch size for training.')
 flags.DEFINE_integer('train_steps'      ,10000                ,'Number of steps for training on counting')
-flags.DEFINE_integer('num_classes'      ,1                    ,'# Classes')
+flags.DEFINE_integer('num_plant_classes'          ,10                   ,'# Classes')
+flags.DEFINE_integer('num_disease_classes'      ,10                    ,'# Classes')
 flags.DEFINE_string ('run_dir'    , FLAGS.base_dir + '/network_log/','Location to store the Tensorboard Output')
 flags.DEFINE_string ('train_dir'  ,FLAGS.base_dir  + '/'            ,'Location of the tfrecord files.')
 flags.DEFINE_string ('ckpt_name'  ,'cows.ckt'                  ,'Checkpoint name')
@@ -43,104 +42,6 @@ flags.DEFINE_string ('ckpt_i_name','cows-interrupt.ckpt'                  ,'Chec
 def launchTensorBoard(directory):
   sleep(30)
   os.system(directory)
-
-def lrelu(x):
-  return tf.maximum(0.1 * x, x)
-
-def delist(net):
-  if type(net) is list:
-    net = tf.concat(net,-1,name = 'cat')
-  return net
-
-def training(global_step,loss,train_vars,learning_rate = .001):
-  update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-  with tf.control_dependencies(update_ops):
-    with tf.variable_scope("Optimizer") as scope:
-      if FLAGS.lr_decay:
-        learning_rate = tf.train.exponential_decay(learning_rate, global_step,
-                                                   250, 0.85, staircase=True)
-      optomizer = tf.train.RMSPropOptimizer(learning_rate,momentum = .8, epsilon = 1e-5)
-      train     = optomizer.minimize(loss,var_list = train_vars,global_step=global_step)
-  return train
-
-def conv2d(net, filters, kernel = 3, stride = 1, dilation_rate = 1, activation = lrelu, padding = 'SAME', trainable = True, name = None, reuse = None):
-  return tf.layers.conv2d(net,filters,kernel,stride,padding,dilation_rate = dilation_rate, activation = activation,trainable = trainable, name = name, reuse = reuse)
-
-def avg_pool(net, kernel = 3, stride = 1, padding = 'SAME', name = None):
-  return tf.layers.average_pooling2d(net,kernel,stride,padding=padding,name=name)
-
-def max_pool(net, kernel = 3, stride = 3, padding = 'SAME', name = None):
-  return tf.layers.max_pooling2d(net,kernel,stride,padding=padding,name=name)
-
-def conv2d_trans(net, features, kernel, stride, activation = lrelu,padding = 'SAME', trainable = True, name = None):
-  return tf.layers.conv2d_transpose(net,features,kernel,stride,activation=activation,padding=padding,trainable=trainable,name=name)
-
-def deconv(net, features = 3, kernel = 3, stride = 2, activation = lrelu,padding = 'SAME', trainable = True, name = None):
-  return tf.layers.conv2d_transpose(net,features,kernel,stride,activation=activation,padding=padding,trainable=trainable,name=name)
-
-def batch_norm(net,training,trainable):
-  with tf.variable_scope('batch_norm') as scope:
-    net = tf.layers.batch_normalization(net,training = training, trainable = trainable)
-  return net
-
-def deconvxy(net,training, stride = 2,features = None, activation = lrelu,padding = 'SAME', trainable = True, name = 'Deconv_xy'):
-  with tf.variable_scope(name) as scope:
-
-    net = delist(net)
-
-    if FLAGS.batch_norm:
-      net = batch_norm(net,training,trainable)
-
-    kernel = stride * 2 + stride % 2
-
-    if features is None:
-      features = int(net.shape[-1].value / stride)
-
-    netx = deconv(net , features  , kernel = kernel, stride = (stride,1), name = "x", trainable = trainable)
-    netx = deconv(netx, features  , kernel = kernel, stride = (1,stride), name = "xy", trainable = trainable)
-    nety = deconv(net , features  , kernel = kernel, stride = (1,stride), name = "y", trainable = trainable)
-    nety = deconv(nety, features  , kernel = kernel, stride = (stride,1), name = "yx", trainable = trainable)
-
-    net  = tf.concat((netx,nety),-1)
-    net  = conv2d(net,features,kernel = 1,name = 'compresor',trainable = trainable)
-    return net
-
-def dense_block(net,training,filters = 2,kernel = 3,kmap = 5,stride = 1,activation = lrelu, padding = 'SAME',trainable = True, name = 'Dense_Block'):
-  with tf.variable_scope(name) as scope:
-
-    net = delist(net)
-
-    if FLAGS.batch_norm:
-      net = batch_norm(net,training,trainable)
-
-    for n in range(kmap):
-      out = conv2d(net,filters=filters,kernel=kernel,stride=1,activation=activation,padding=padding,trainable=trainable,name = '_map_%d'%n)
-      net = tf.concat([net,out],-1)
-
-    if stride is not 1:
-      prestride = net
-      net = max_pool(net,stride,stride)
-      return prestride, net
-
-    else:
-      return net
-
-def atrous_block(net,filters = 8,kernel = 3,dilation = 1,kmap = 2,activation = lrelu,trainable = True,name = 'Atrous_Block'):
-  newnet = []
-  with tf.variable_scope(name) as scope:
-    for x in range(dilation,kmap * dilation,dilation):
-      # Reuse and not trainable if beyond the first layer.
-      re = True  if x > dilation else None
-      tr = False if x > dilation else trainable
-
-      with tf.variable_scope("ATROUS",reuse = tf.AUTO_REUSE) as scope:
-        # Total Kernel visual size: Kernel + ((Kernel - 1) * (Dilation - 1))
-        # At kernel = 9 with dilation = 2; 9 + 8 * 1, 17 px
-        layer = conv2d(net,filters = filters, kernel = kernel, dilation_rate = x,reuse = re,trainable = tr)
-        newnet.append(layer)
-
-    net = delist(newnet)
-    return net
 
 # The segmentation network.
 def inference(images,training,name,trainable = True):
@@ -167,125 +68,8 @@ def inference(images,training,name,trainable = True):
     net = delist(net)
 
     logits = conv2d(net,FLAGS.num_classes,5,stride = 1,name = 'finale',trainable = trainable)
+    logits = tf.nn.softmax(logit)
     return logits
-
-# Defines a function to output the histogram of trainable variables into TensorBoard
-def hist_summ():
-  for var in tf.trainable_variables():
-    tf.summary.histogram(var.name,var)
-
-# Absolute accuracy calculation for counting
-def accuracy(labels_flat,logits_flat):
-  with tf.variable_scope("Accuracy") as scope:
-    accuracy = tf.metrics.accuracy(labels = labels_flat, predictions = logits_flat)
-    acc,up = accuracy
-    tf.summary.scalar('Accuracy',tf.multiply(acc,100))
-    return accuracy
-
-def cmat(labels_flat,logits_flat):
-  with tf.variable_scope("Confusion_Matrix") as scope:
-    label_1d  = tf.reshape(labels_flat, (FLAGS.batch_size, imgW * imgH))
-    logit_1d = tf.reshape(logits_flat, (FLAGS.batch_size, imgW * imgH))
-    cmat_sum = tf.zeros((FLAGS.num_classes,FLAGS.num_classes),tf.int32)
-    for i in range(FLAGS.batch_size):
-      cmat = tf.confusion_matrix(labels = label_1d[i], predictions = logit_1d[i], num_classes = FLAGS.num_classes)
-      cmat_sum = tf.add(cmat,cmat_sum)
-    return cmat_sum
-
-def l2loss():
-  with tf.variable_scope("L2_Loss") as scope:
-    l2 = tf.add_n([tf.nn.l2_loss(var) for var in tf.trainable_variables() if 'bias' not in var.name])
-    l2 = tf.scalar_mul(.0002,l2)
-    tf.summary.scalar('L2_Loss',loss)
-    return l2
-
-# Function to compute Mean Square Error loss
-def mse_loss(labels,logits):
-  with tf.variable_scope('Mean_Square_Error') as scope:
-    loss = tf.losses.mean_squared_error(labels,logits)
-    tf.summary.scalar('MSE_Loss',loss)
-
-    if FLAGS.l2_loss:
-      loss = tf.add(loss,l2loss())
-    tf.summary.scalar('Total_Loss',loss)
-    return loss
-
-
-# Loss function for tape, using cross entropy
-def xentropy_loss(labels,logits):
-  with tf.variable_scope("XEnt_Loss") as scope:
-    logits = tf.reshape(logits,[FLAGS.batch_size*imgH*imgW,FLAGS.num_classes])
-    labels = tf.reshape(tf.argmax(labels,-1),[FLAGS.batch_size*imgH*imgW])
-    labels = tf.cast(labels,tf.int32)
-    loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels = labels,logits = logits)
-    loss = tf.reduce_mean(loss)
-    tf.summary.scalar('XEnt_Loss',loss)
-
-    if FLAGS.l2_loss:
-      loss = tf.add(loss,l2loss())
-    tf.summary.scalar('Total_Loss',loss)
-    return loss
-
-def per_class_acc(labels,logits):
-  with tf.variable_scope("PerClassAcc"):
-    pcacc = tf.metrics.mean_per_class_accuracy(labels = labels, predictions = logits, num_classes = FLAGS.num_classes)
-    p_acc, op = p_acc
-
-
-def miou(labels,logits):
-  with tf.variable_scope("MIOU") as scope:
-    miou      = tf.metrics.mean_iou(labels = labels, predictions = logits, num_classes = FLAGS.num_classes)
-    _miou,op  = miou
-    tf.summary.scalar('MIOU',_miou)
-    return miou
-
-# Image saving function, when the op is called preforms the summary saving,
-# but also returns encoded images for saving if needed.
-def save_imgs(images):
-  with tf.variable_scope("Img_Save") as scope:
-    # Setting up the save operations
-    save_imgs      = []
-    for i in range(FLAGS.batch_size):
-      save_img = tf.image.encode_png(images[i,:,:,:],3)
-      save_imgs.append(save_img)
-
-    tf.summary.image('Image',images[:,::save_stride,::save_stride,:])
-    save_imgs_grouped = tf.tuple(save_imgs)
-    return save_imgs_grouped
-
-# Tape GT saving function, when the op is called preforms the summary saving,
-# but also returns encoded images for saving if needed.
-def save_labs(labels):
-  with tf.variable_scope("GT_Save") as scope:
-    # labels = tf.reshape(labels,[FLAGS.batch_size,imgH,imgW])
-    intensity = tf.convert_to_tensor(255,dtype = tf.float32,name = 'intensity')
-    labels = tf.scalar_mul(intensity,labels)
-    labels = tf.cast(labels,tf.uint8)
-    save_gts       = []
-    for i in range(FLAGS.batch_size):
-      save_img = tf.image.encode_png(labels[i,:,:],1)
-      save_gts.append(save_img)
-
-    tf.summary.image('Ground_Truth',labels[:,::save_stride,::save_stride,:])
-    save_gts_grouped  = tf.tuple(save_gts)
-    return save_gts_grouped
-
-# Tape Logit saving function, when the op is called preforms the summary saving,
-# but also returns encoded images for saving if needed.
-def save_logs(logits):
-  with tf.variable_scope("Pred_Save") as scope:
-    # logits = tf.reshape(logits,[FLAGS.batch_size,imgH,imgW])
-    intensity = tf.convert_to_tensor(255,dtype = tf.float32,name = 'intensity')
-    logits = tf.scalar_mul(intensity,logits)
-    logits = tf.cast(logits,tf.uint8)
-    save_logs      = []
-    for i in range(FLAGS.batch_size):
-      save_img = tf.image.encode_png(logits[i,:,:],1)
-      save_logs.append(save_img)
-
-    tf.summary.image('Prediction',logits[:,::save_stride,::save_stride,:])
-    save_logs_grouped = tf.tuple(save_logs)
-    return save_logs_grouped
 
 # Runs the tape training.
 def train(train_run = True, restore = False):
@@ -303,13 +87,16 @@ def train(train_run = True, restore = False):
       with tf.variable_scope("Net_Inputs") as scope:
         images, labels, count = inputs(train=train_run,batch_size=FLAGS.batch_size,num_epochs=FLAGS.num_epochs,num_classes = FLAGS.num_classes)
 
-      logits         = inference(images,training = train_run,name = 'FCNN',trainable = True)
+      p_logits         = p_inference(images,training = train_run,name = 'FCNN',trainable = True)
+      p_logits_flat    = tf.nn.argmax(logits)
+      d_logits         = d_inference
       # Calculating all fo the metrics, thins we judge a network by
       with tf.variable_scope("Metrics") as scope:
         # Showing var histograms and distrobutions during testing is worthless.
         if FLAGS.advanced_logging and train_run:
           hist_summ()
-        loss           = mse_loss(labels,logits)
+        p_loss           = xentropy_loss(labels,logits)
+        p_accuracy       = ops.accuracy(labels,logits_flat)
 
         metrics        = loss
 
@@ -321,9 +108,9 @@ def train(train_run = True, restore = False):
         train = tf.assign_add(global_step,1,name = 'Global_Step')
 
       # Save operations
-      save_imgs_grouped = save_imgs(images)
-      save_logs_grouped = save_logs(logits)
-      save_labs_grouped  = save_labs(labels)
+      save_imgs_grouped = imsave(images,names = 'Images')
+      save_logs_grouped = imsave(logits,names = 'Logits')
+      save_labs_grouped = imsave(labels,names = 'Labels')
 
       # Initialize all variables in network
       sess.run(tf.local_variables_initializer())
