@@ -5,8 +5,8 @@ import os.path
 import random
 
 # Basic model parameters as external flags.
-imgW = int(4000)
-imgH = int(3000)
+imgW = int(256)
+imgH = int(256)
 
 def sizes():
   return imgW,imgH
@@ -15,8 +15,8 @@ flags = tf.app.flags
 FLAGS = flags.FLAGS
 
 # Constants used for dealing with the files, matches convert_to_records.
-TRAIN_FILE =      'train_cows.tfrecords'
-VALIDATION_FILE = 'test_cows.tfrecords'
+TRAIN_FILE =
+VALIDATION_FILE =
 
 # Helper functions for defining tf types
 def _bytes_feature(value):
@@ -26,12 +26,11 @@ def _bytes_feature(value):
 def _int64_feature(value):
     return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
-def get_example(img_raw,label_raw,count_raw):
+def get_example(img_raw,p_label,d_label):
   example = tf.train.Example(features=tf.train.Features(feature={
       'image_raw': _bytes_feature(img_raw),
-      'label_raw': _bytes_feature(label_raw),
-      'count_raw': _bytes_feature(count_raw)
-                                             }))
+      'p_label_r': _bytes_feature(p_label),
+      'd_label_r': _bytes_feature(d_label)  }))
   return example
 
 def write_image_label_pairs_to_tfrecord(filename_pairs, tfrecords_filename):
@@ -55,50 +54,36 @@ def write_image_label_pairs_to_tfrecord(filename_pairs, tfrecords_filename):
         img = img.resize((imgW,imgH),Image.NEAREST)
         img = np.asarray(img)
 
-        label = Image.open(lab_path)
-        label = label.resize((imgW,imgH),Image.NEAREST)
-        label = np.asarray(label)
-        label = label[:,:,3]
+        p_label =
+        d_label =
 
         count = 0
         with open(dat_path,'r') as cnt_file:
           count = np.asarray(cnt_file.read())
 
-        img       =   img.astype(np.uint8)
-        label     = label.astype(np.uint8)
-        count     = count.astype(np.uint8)
-        print(img.shape)
-        print(label.shape)
+        img       =     img.astype(np.uint8)
+        p_label   = p_label.astype(np.uint8)
+        d_label   = d_label.astype(np.uint8)
 
-        # f, (img_p, lab_p) = plt.subplots(2)
-        # img_p.imshow(img)
-        # lab_p.imshow(label * 255)
-        # plt.show()
+        img_raw   =     img.tobytes()
+        p_label_r = p_label.tobytes()
+        d_label_r = d_label.tobytes()
 
-        img_raw   =   img.tobytes()
-        label_raw = label.tobytes()
-        count_raw = count.tobytes()
-
-        example = get_example(img_raw,label_raw,count_raw)
+        example = get_example(img_raw,p_label_r,d_label_r)
         writer.write(example.SerializeToString())
 
-        img_raw   =   np.fliplr(img).astype(np.uint8).tobytes()
-        label_raw = np.fliplr(label).astype(np.uint8).tobytes()
-
-        example = get_example(img_raw,label_raw,count_raw)
+        img_raw = np.fliplr(img).astype(np.uint8).tobytes()
+        example = get_example(img_raw,p_label_r,d_label_r)
         writer.write(example.SerializeToString())
 
         img_raw   =   np.flipud(img).astype(np.uint8).tobytes()
-        label_raw = np.flipud(label).astype(np.uint8).tobytes()
-
-        example = get_example(img_raw,label_raw,count_raw)
+        example = get_example(img_raw,p_label_r,d_label_r)
         writer.write(example.SerializeToString())
 
         img_raw   =   np.fliplr(np.flipud(img)).astype(np.uint8).tobytes()
-        label_raw = np.fliplr(np.flipud(label)).astype(np.uint8).tobytes()
-
-        example = get_example(img_raw,label_raw,count_raw)
+        example = get_example(img_raw,p_label_r,d_label_r)
         writer.write(example.SerializeToString())
+
         i  = i + 4
         print("Processed " + str(i) + " images...")
     print("Done!")
@@ -136,19 +121,14 @@ def read_decode(tfrecord_filenames_queue, num_classes):
         })
 
     image = tf.decode_raw(features['image_raw'], tf.uint8)
-    label = tf.decode_raw(features['label_raw'], tf.uint8)
-    count = tf.decode_raw(features['count_raw'], tf.uint8)
+    label = tf.decode_raw(features['p_label_r'], tf.uint8)
+    count = tf.decode_raw(features['d_label_r'], tf.uint8)
 
     image_shape = tf.stack([imgH, imgW, 3])
-    label_shape = tf.stack([imgH, imgW, 1])
 
     image = tf.reshape(image, image_shape)
     image = tf.cast(image,tf.float32)
     image = tf.divide(image,255)
-
-    label = tf.reshape(label, label_shape)
-    label = tf.cast(label,tf.float32)
-    label = tf.divide(label,255)
 
     count = tf.reshape(count, [1])
 
@@ -179,12 +159,12 @@ def inputs(train):
     image, label, count = read_decode(filename_queue,FLAGS.num_classes)
 
     if train:
-        images, labels, count = tf.train.shuffle_batch(
-            [image, label, count], batch_size=FLAGS.batch_size, num_threads=1,
+        images, p_label, d_label = tf.train.shuffle_batch(
+            [image, p_label, d_label], batch_size=FLAGS.batch_size, num_threads=1,
             capacity=10 + 2 * FLAGS.batch_size,
             min_after_dequeue=10)
     else:
-        images, labels, count = tf.train.batch(
-            [image, label, count], batch_size=FLAGS.batch_size, num_threads=2,
+        images, p_label, d_label = tf.train.batch(
+            [image, p_label, d_label], batch_size=FLAGS.batch_size, num_threads=2,
             capacity=10 + 2 * FLAGS.batch_size)
-    return images, labels, count
+    return images, p_label, d_label
