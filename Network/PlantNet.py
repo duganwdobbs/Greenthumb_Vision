@@ -62,14 +62,23 @@ def training(global_step,loss,train_vars,learning_rate = .001):
 # The segmentation network.
 def inference(images,p_lab,d_lab,training,name,trainable = True):
   with tf.variable_scope(name) as scope:
+    # Preform some image preprocessing
     net = images
     net = delist(net)
     net = tf.cast(net,tf.float32)
     net = batch_norm(net,training,trainable)
+    # If we receive image channels in a format that shouldn't be normalized,
+    #   that goes here.
 
+    # Run three dense reduction modules to reduce the number of parameters in
+    #   the network and for low parameter feature extraction.
     net = stf.dense_reduction(net,training,trainable,...,...)
     net = stf.dense_reduction(net,training,trainable,...,...)
     net = stf.dense_reduction(net,training,trainable,...,...)
+
+    # Run the network over some resnet modules, including two resnet reduction
+    #   modules in order to further reduce the parameters and have a powerful,
+    #   proven network architecture.
     net = stf.resnet_a(net)
     net = stf.resnet_b(net)
     net = stf.resnet_reduction(net)
@@ -78,35 +87,50 @@ def inference(images,p_lab,d_lab,training,name,trainable = True):
     net = stf.resnet_a(net)
     net = stf.conv2d(net,128,1)
 
+    # We're leaving the frequency domain in order to preform fully connected
+    #    inferences. Fully connected inferences do not work with imaginary
+    #    numbers. The error would always have an i/j term that will not be able
+    #    to generate a correct gradient for.
     net = stf.ifft2d(net)
 
+    # Theoretically, the network will be 8x8x128, for 8192 neurons in the first
+    #    fully connected network.
     net = util.squish_to_batch(net)
     _b,neurons = net.get_shape().as_list()
 
+    # Fully connected network with number of neurons equal to the number of
+    #    parameters in the network at this point
     net = tf.layers.dense(net,neurons)
 
+    # Fully connected layer to extract the plant classification
+    #    NOTE: This plant classification will be used to extract the proper
+    #          disease classification matrix
     p_log      = tf.layers.dense(net,FLAGS.num_plant_classes)
 
+    # Construct a number of final layers for diseases equal to the number of
+    # plants.
     d_net = []
     for x in range(FLAGS.num_plant_classes):
-      chan = tf.layers.dense(net,FLAGS.num_disease_classes)
+      chan = tf.layers.dense(net,FLAGS.num_disease_classes,name = 'Disease_%d'%x)
       d_net.append(chan)
     d_net = delist(d_net)
 
-    if training:
-      index = d_label
-    else:
-      index = tf.argmax(p_log)
+    # If we're training, we want to not use the plant network output, rather the
+    #    plant label. This ensures that the disease layers train properly.
+    #    NOTE: The disease loss function only trains based on this final layer.
+    #          IE: The disease gradient does not flow through the whole network,
+    #              using the plant network as its preprocessing.
+    index = d_label if training else tf.argmax(p_log)
 
-    d_log      = d_net[index]
+    # Extract the disease logit
+    d_log = d_net[index]
 
+    # Get the losses and metrics
     p_loss,p_metrics = metrics(labels = p_lab,logits = p_log,name = "Plant_Metrics")
     d_loss,d_metrics = metrics(labels = d_lab,logits = d_log,name = "Disease_Metrics")
     metrics = (p_metrics,d_metrics)
-
-    loss = p_loss + d_loss
-
-    return p_logit,d_logit,loss,metrics
+    
+    return p_logit,d_logit,p_loss,d_loss,metrics
 
 # Runs the tape training.
 def train(train_run = True, restore = False):
