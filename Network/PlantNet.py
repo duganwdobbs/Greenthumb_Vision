@@ -4,6 +4,7 @@ import platform
 
 import numpy         as     np
 import tensorflow    as     tf
+import spec_ops      as     stf
 
 from multiprocessing import Process
 from inspector       import inspect
@@ -21,55 +22,91 @@ flags = tf.app.flags
 FLAGS = flags.FLAGS
 
 if   platform.system() == 'Windows':
-  flags.DEFINE_string ('base_dir'  ,'D:/Cows/','Base os specific DIR')
+  flags.DEFINE_string ('base_dir'  ,'D:/Greenthumb_Vision/','Base os specific DIR')
 elif platform.system() == 'Linux':
-  flags.DEFINE_string ('base_dir'  ,'/home/ddobbs/BinaLab-Semantic-Segmentation/data/','Base os specific DIR')
+  flags.DEFINE_string ('base_dir'  ,'/home/ddobbs/Greenthumb_Vision/','Base os specific DIR')
 
-flags.DEFINE_boolean('l2_loss' ,False,'If we use l2 regularization')
-flags.DEFINE_boolean('batch_norm' ,True ,'If we use batch normalization')
-flags.DEFINE_boolean('lr_decay',True,'If we use Learning Rate Decay')
-flags.DEFINE_boolean('advanced_logging' ,False,'If we log metadata and histograms')
-flags.DEFINE_integer('num_epochs'       , None                ,'Number of epochs to run trainer.')
-flags.DEFINE_integer('batch_size'       , 1                 ,'Batch size for training.')
-flags.DEFINE_integer('train_steps'      ,10000                ,'Number of steps for training on counting')
-flags.DEFINE_integer('num_plant_classes'          ,10                   ,'# Classes')
-flags.DEFINE_integer('num_disease_classes'      ,10                    ,'# Classes')
+flags.DEFINE_boolean('l2_loss'            ,False ,'If we use l2 regularization')
+flags.DEFINE_boolean('batch_norm'         ,True  ,'If we use batch normalization')
+flags.DEFINE_boolean('lr_decay'           ,True  ,'If we use Learning Rate Decay')
+flags.DEFINE_boolean('advanced_logging'   ,False ,'If we log metadata and histograms')
+flags.DEFINE_integer('num_epochs'         ,None  ,'Number of epochs to run trainer.')
+flags.DEFINE_integer('batch_size'         ,1     ,'Batch size for training.')
+flags.DEFINE_integer('train_steps'        ,10000 ,'Number of steps for training on counting')
+flags.DEFINE_integer('num_plant_classes'  ,10    ,'# Classes')
+flags.DEFINE_integer('num_disease_classes',10    ,'# Classes')
 flags.DEFINE_string ('run_dir'    , FLAGS.base_dir + '/network_log/','Location to store the Tensorboard Output')
 flags.DEFINE_string ('train_dir'  ,FLAGS.base_dir  + '/'            ,'Location of the tfrecord files.')
-flags.DEFINE_string ('ckpt_name'  ,'cows.ckt'                  ,'Checkpoint name')
-flags.DEFINE_string ('ckpt_i_name','cows-interrupt.ckpt'                  ,'Checkpoint name')
+flags.DEFINE_string ('ckpt_name'  ,'cows.ckt'                       ,'Checkpoint name')
+flags.DEFINE_string ('ckpt_i_name','cows-interrupt.ckpt'            ,'Checkpoint Interrupt name')
+flags.DEFINE_string ('net_name','PlantVision'                       ,'Network name')
 
 def launchTensorBoard(directory):
   sleep(30)
   os.system(directory)
 
+def training(global_step,loss,train_vars,learning_rate = .001):
+  update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+  with tf.control_dependencies(update_ops):
+    with tf.variable_scope("Optimizer") as scope:
+      if FLAGS.lr_decay:
+        learning_rate = tf.train.exponential_decay(learning_rate, global_step,
+                                                   250, 0.85, staircase=True)
+        tf.summary.scalar("Learning_Rate",learning_rate)
+
+      optomizer = tf.train.RMSPropOptimizer(learning_rate,momentum = .8, epsilon = 1e-5)
+      train     = optomizer.minimize(loss,var_list = train_vars,global_step=global_step)
+
+      return train
+
 # The segmentation network.
-def inference(images,training,name,trainable = True):
+def inference(images,p_lab,d_lab,training,name,trainable = True):
   with tf.variable_scope(name) as scope:
     net = images
+    net = delist(net)
     net = tf.cast(net,tf.float32)
     net = batch_norm(net,training,trainable)
 
-    net = atrous_block(net,filters = 2, kernel = 4, dilation = 2, kmap = 3, trainable = trainable)
+    net = stf.dense_reduction(net,training,trainable,...,...)
+    net = stf.dense_reduction(net,training,trainable,...,...)
+    net = stf.dense_reduction(net,training,trainable,...,...)
+    net = stf.resnet_a(net)
+    net = stf.resnet_b(net)
+    net = stf.resnet_reduction(net)
+    net = stf.resnet_b(net)
+    net = stf.resnet_reduction(net)
+    net = stf.resnet_a(net)
+    net = stf.conv2d(net,128,1)
 
-    strides = factors(imgH,imgW)
-    prestride = []
+    net = stf.ifft2d(net)
 
-    for x in range(len(strides)):
-      pre, net = dense_block(net,training = training, filters = 4,kernel = 3,  kmap = 3  ,stride = strides[x],trainable = trainable,
-                             name = 'DenseBlock%d'%x)
-      prestride.append(pre)
+    net = util.squish_to_batch(net)
+    _b,neurons = net.get_shape().as_list()
 
-    for x in range(len(strides)):
-      net = deconvxy(net,training,stride = strides[-(x+1)], trainable = trainable,
-                     name = 'DeconvXY%d'%x)
-      net = [net,prestride[-(x+1)]]
+    net = tf.layers.dense(net,neurons)
 
-    net = delist(net)
+    p_log      = tf.layers.dense(net,FLAGS.num_plant_classes)
 
-    logits = conv2d(net,FLAGS.num_classes,5,stride = 1,name = 'finale',trainable = trainable)
-    logits = tf.nn.softmax(logit)
-    return logits
+    d_net = []
+    for x in range(FLAGS.num_plant_classes):
+      chan = tf.layers.dense(net,FLAGS.num_disease_classes)
+      d_net.append(chan)
+    d_net = delist(d_net)
+
+    if training:
+      index = d_label
+    else:
+      index = tf.argmax(p_log)
+
+    d_log      = d_net[index]
+
+    p_loss,p_metrics = metrics(labels = p_lab,logits = p_log,name = "Plant_Metrics")
+    d_loss,d_metrics = metrics(labels = d_lab,logits = d_log,name = "Disease_Metrics")
+    metrics = (p_metrics,d_metrics)
+
+    loss = p_loss + d_loss
+
+    return p_logit,d_logit,loss,metrics
 
 # Runs the tape training.
 def train(train_run = True, restore = False):
@@ -85,22 +122,11 @@ def train(train_run = True, restore = False):
 
       # Build the network from images, inference, loss, and backpropogation.
       with tf.variable_scope("Net_Inputs") as scope:
-        images, labels, count = inputs(train=train_run,batch_size=FLAGS.batch_size,num_epochs=FLAGS.num_epochs,num_classes = FLAGS.num_classes)
+        images, p_lab, d_lab = inputs(train=train_run,batch_size=FLAGS.batch_size,num_epochs=FLAGS.num_epochs,num_classes = FLAGS.num_classes)
 
-      p_logits         = p_inference(images,training = train_run,name = 'FCNN',trainable = True)
-      p_logits_flat    = tf.nn.argmax(logits)
-      d_logits         = d_inference
-      # Calculating all fo the metrics, thins we judge a network by
-      with tf.variable_scope("Metrics") as scope:
-        # Showing var histograms and distrobutions during testing is worthless.
-        if FLAGS.advanced_logging and train_run:
-          hist_summ()
-        p_loss           = xentropy_loss(labels,logits)
-        p_accuracy       = ops.accuracy(labels,logits_flat)
+      p_log,d_log,loss,metrics = p_inference(images,p_lab,d_lab,training = train_run,name = FLAGS.net_name,trainable = True)
 
-        metrics        = loss
-
-      train_vars = [var for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope = 'FCNN') if var in tf.trainable_variables()]
+      train_vars = [var for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope = FLAGS.net_name) if var in tf.trainable_variables()]
       write_vars = [var for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES) if 'batch_norm' in var.name]
       if train_run:
         train = training(global_step,loss,train_vars)
@@ -108,9 +134,9 @@ def train(train_run = True, restore = False):
         train = tf.assign_add(global_step,1,name = 'Global_Step')
 
       # Save operations
-      save_imgs_grouped = imsave(images,names = 'Images')
-      save_logs_grouped = imsave(logits,names = 'Logits')
-      save_labs_grouped = imsave(labels,names = 'Labels')
+      save_images = imsave(images,names = 'Images')
+
+      save_imgs = [save_images]
 
       # Initialize all variables in network
       sess.run(tf.local_variables_initializer())
@@ -151,7 +177,7 @@ def train(train_run = True, restore = False):
       threads        = tf.train.start_queue_runners(sess = sess, coord = coord)
 
       try:
-        ops = [train,summaries,metrics] if train_run else [train,summaries,metrics,save_imgs_grouped,save_logs_grouped,save_labs_grouped]
+        ops = [train,summaries,metrics] if train_run else [train,summaries,metrics,save_imgs,p_lab,p_log,d_lab,d_log]
 
         step = tf.train.global_step(sess,global_step)
         while not coord.should_stop() and step <= FLAGS.train_steps:
@@ -159,9 +185,9 @@ def train(train_run = True, restore = False):
 
           # Run the network and write summaries
           if train_run:
-            _,_summ_result,_metrics                   = sess.run(ops, options = run_options, run_metadata = run_metadata)
+            _,_summ_result,_metrics       = sess.run(ops, options = run_options, run_metadata = run_metadata)
           else:
-            _,_summ_result,_metrics,_imgs,_labs,_logs = sess.run(ops, options = run_options, run_metadata = run_metadata)
+            _,_summ_result,_metrics,_imgs,_p_lab,_p_log,_d_lab,_d_log = sess.run(ops, options = run_options, run_metadata = run_metadata)
 
           # Write summaries
           if FLAGS.advanced_logging:
@@ -170,13 +196,10 @@ def train(train_run = True, restore = False):
 
           #Write the cmat to a file at each step, write images if testing.
           if not train_run:
-            for x in range(FLAGS.batch_size):
-              with open(filestr + '%d_%d_img.png'%(step,x),'wb+') as f:
-                f.write(_imgs[x])
-              with open(filestr + '%d_%d_log.png'%(step,x),'wb+') as f:
-                f.write(_labs[x])
-              with open(filestr + '%d_%d_lab.png'%(step,x),'wb+') as f:
-                f.write(_logs[x])
+            for x in range(len(_imgs)):
+              for d in range(FLAGS.batch_size):
+                with open(filestr + '%d_plant_%d_%d_disease_%d_%d'%(step,x,_p_lab[d],_p_log[d],_d_lab[d],_d_log[d]) + im_t[x] + '.png','wb+') as f:
+                  f.write(_imgs[x][d])
 
           if step%100 == 0 and train_run:
             # Save some checkpoints

@@ -67,6 +67,10 @@ def disc_label_gen(label):
     disc_label = tf.reshape(disc_label,(disc_label.shape[0].value,1,1))
     return disc_label
 
+def squish_to_batch(net):
+  batch, input_height, input_width, channels = net.get_shape().as_list()
+  net = tf.reshape(net,[batch,input_height*input_width*channels])
+  return net
 
 # Tape GT saving function, when the op is called preforms the summary saving,
 # but also returns encoded images for saving if needed.
