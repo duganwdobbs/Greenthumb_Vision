@@ -22,20 +22,16 @@ def directoryFixer(directory):
       os.mkdir(directory)
 
 # This function finds all files of given extention in given path.
-def find_files(path,ext = '.png'):
-  return [path + '/' + f for f in os.listdir(path) if f.endswith(ext)]
+def find_files(path,ext = '.json'):
+  return [f for f in os.listdir(path) if f.endswith(ext)]
 
 # This function uses find_files to find ALL FILES recursivly in given path root
-def parse_dir(base_directory,ext = '.png'):
+def parse_dir(base_directory):
   returnlist = []
   for x in os.walk(base_directory):
       x = x[0].replace('\\','/')
-      # print("Walking: "+x)
-      appendlist = find_files(x,ext)
-      if appendlist:
+      print("Walking: "+x)
+      appendlist = find_files(x)
+      if(appendlist):
         returnlist.append(appendlist)
-  ret_list = []
-  for r in returnlist:
-    for s in r:
-      ret_list.append(s)
-  return ret_list
+  return returnlist

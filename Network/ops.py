@@ -3,16 +3,38 @@ import tensorflow as tf
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 
+bn_scope = 0
+
 def delist(net):
   if type(net) is list:
     net = tf.concat(net,-1,name = 'cat')
   return net
 
 def lrelu(x):
-  return tf.leaky_relu(x)
+  with tf.variable_scope('lrelu'):
+    return tf.maximum(0.1 * x, x)
 
-def conv2d(net, filters, kernel = 3, stride = 1, dilation_rate = 1, activation = lrelu, padding = 'SAME', trainable = True, name = None, reuse = None):
-  return tf.layers.conv2d(net,filters,kernel,stride,padding,dilation_rate = dilation_rate, activation = activation,trainable = trainable, name = name, reuse = reuse)
+def linear(x):
+  return x
+
+def conv2d(net, features, kernel = 3, stride = 1, dilation_rate = 1, activation = tf.nn.relu, padding = 'SAME', trainable = True, name = None, reuse = None):
+  net = tf.layers.conv2d(delist(net),features,kernel,stride,padding,dilation_rate = dilation_rate, activation = activation,trainable = trainable, name = name, reuse = reuse)
+  return net
+
+def bn_conv2d(net, training, features, kernel = 3, stride = 1, dilation_rate = 1, activation = tf.nn.relu, use_bias = False, padding = 'SAME', trainable = True, name = None, reuse = None):
+  with tf.variable_scope('BN_Conv_%d'%(FLAGS.conv_scope)) as scope:
+    FLAGS.conv_scope+=1
+    net = conv2d(delist(net), features, kernel, stride, dilation_rate, activation, padding, trainable, name, reuse)
+    net = batch_norm(net,training,trainable,activation)
+    return net
+
+def batch_norm(net,training,trainable,activation = tf.nn.relu):
+  with tf.variable_scope('Batch_Norm_%d'%(FLAGS.bn_scope)):
+    FLAGS.bn_scope+=1
+    if activation is None:
+      activation = linear
+    net = activation(tf.layers.batch_normalization(delist(net),training = training, trainable = trainable))
+    return net
 
 def avg_pool(net, kernel = 3, stride = 1, padding = 'SAME', name = None):
   return tf.layers.average_pooling2d(net,kernel,stride,padding=padding,name=name)
@@ -20,18 +42,52 @@ def avg_pool(net, kernel = 3, stride = 1, padding = 'SAME', name = None):
 def max_pool(net, kernel = 3, stride = 3, padding = 'SAME', name = None):
   return tf.layers.max_pooling2d(net,kernel,stride,padding=padding,name=name)
 
-def conv2d_trans(net, features, kernel, stride, activation = lrelu,padding = 'SAME', trainable = True, name = None):
+def conv2d_trans(net, features, kernel, stride, activation = tf.nn.relu,padding = 'SAME', trainable = True, name = None):
   return tf.layers.conv2d_transpose(net,features,kernel,stride,activation=activation,padding=padding,trainable=trainable,name=name)
 
-def deconv(net, features = 3, kernel = 3, stride = 2, activation = lrelu,padding = 'SAME', trainable = True, name = None):
+def deconv(net, features = 3, kernel = 3, stride = 2, activation = tf.nn.relu,padding = 'SAME', trainable = True, name = None):
   return tf.layers.conv2d_transpose(net,features,kernel,stride,activation=activation,padding=padding,trainable=trainable,name=name)
 
-def batch_norm(net,training,trainable):
-  with tf.variable_scope('batch_norm') as scope:  
-    net = tf.layers.batch_normalization(net,training = training, trainable = trainable)
-  return net
+def modified_resnet_a(net,training,trainable,name):
+  with tf.variable_scope(name) as scope:
+    in_tensor = net
+    in_size   = in_tensor.shape[-1].value
+    left_chan = bn_conv2d(net      ,training,features = 32, kernel = 1)
 
-def deconvxy(net,training, stride = 2,features = None, activation = lrelu,padding = 'SAME', trainable = True, name = 'Deconv_xy'):
+    midd_chan = bn_conv2d(net      ,training,features = 32, kernel = 1)
+    midd_chan = bn_conv2d(midd_chan,training,features = 32, kernel = 3)
+
+    righ_chan = bn_conv2d(net      ,training,features = 32, kernel = 1)
+    righ_chan = bn_conv2d(righ_chan,training,features = 32, kernel = 3)
+    righ_chan = bn_conv2d(righ_chan,training,features = 32, kernel = 3)
+
+    net = [left_chan,midd_chan,righ_chan]
+
+    net = conv2d(net,features = in_size,kernel = 1, activation = None)
+
+    net = in_tensor * .2 + net
+
+    return net
+
+
+def modified_reduction_model(net,training,trainable,name):
+  with tf.variable_scope(name) as scope:
+    left_chan = max_pool(net,kernel = 3, stride = 2,padding = 'VALID')
+
+    midd_chan = bn_conv2d(net      ,training,features = 192, kernel = 1,)
+    midd_chan = bn_conv2d(midd_chan,training,features = 128, stride = 2,padding = 'VALID')
+
+    righ_chan = bn_conv2d(net      ,training,features = 192, kernel = 1)
+    righ_chan = bn_conv2d(righ_chan,training,features = 128, kernel = (1,7))
+    righ_chan = bn_conv2d(righ_chan,training,features = 128, kernel = (7,1))
+    righ_chan = bn_conv2d(righ_chan,training,features = 128, kernel = 3, stride = 2, padding = 'VALID')
+
+    net = [left_chan,midd_chan,righ_chan]
+    net = delist(net)
+
+    return net
+
+def deconvxy(net,training, stride = 2,features = None, activation = tf.nn.relu,padding = 'SAME', trainable = True, name = 'Deconv_xy'):
   with tf.variable_scope(name) as scope:
 
     net = delist(net)
@@ -41,9 +97,12 @@ def deconvxy(net,training, stride = 2,features = None, activation = lrelu,paddin
     if features is None:
       features = int(net.shape[-1].value / stride)
 
-    netx = deconv(net , features  , kernel = kernel, stride = (stride,1), name = "x", trainable = trainable)
+    netx = deconv(net , features  , kernel = kernel, stride = (stride,1), name = "x",  trainable = trainable)
+    nety = deconv(net , features  , kernel = kernel, stride = (1,stride), name = "y",  trainable = trainable)
+
+    features = int(features / stride)
+
     netx = deconv(netx, features  , kernel = kernel, stride = (1,stride), name = "xy", trainable = trainable)
-    nety = deconv(net , features  , kernel = kernel, stride = (1,stride), name = "y", trainable = trainable)
     nety = deconv(nety, features  , kernel = kernel, stride = (stride,1), name = "yx", trainable = trainable)
 
     net  = tf.concat((netx,nety),-1)
@@ -53,23 +112,26 @@ def deconvxy(net,training, stride = 2,features = None, activation = lrelu,paddin
 
     return net
 
-def dense_block(net,training, filters = 2, kernel = 3, kmap = 5, stride = 1,
-                activation = lrelu, padding = 'SAME', trainable = True,
-                name = 'Dense_Block', prestride_return = True):
+def dense_block(net,training, features = 2, kernel = 3, kmap = 5, stride = 1,
+                activation = tf.nn.relu, padding = 'SAME', trainable = True,
+                name = 'Dense_Block', prestride_return = True,use_max_pool = True):
   with tf.variable_scope(name) as scope:
 
     net = delist(net)
 
     for n in range(kmap):
-      out = conv2d(net,filters=filters,kernel=kernel,stride=1,activation=activation,padding=padding,trainable=trainable,name = '_map_%d'%n)
-      net = tf.concat([net,out],-1)
+      out = conv2d(net,features=features,kernel=kernel,stride=1,activation=activation,padding=padding,trainable=trainable,name = '_map_%d'%n)
+      net = tf.concat([net,out],-1,name = '%d_concat'%n)
 
     if FLAGS.batch_norm:
       net = batch_norm(net,training,trainable)
 
     if stride is not 1:
       prestride = net
-      net = max_pool(net,stride,stride)
+      if use_max_pool:
+        net = max_pool(net,stride,stride)
+      else:
+        net = avg_pool(net,stride,stride)
       if prestride_return:
         return prestride, net
       else:
@@ -78,7 +140,7 @@ def dense_block(net,training, filters = 2, kernel = 3, kmap = 5, stride = 1,
     else:
       return net
 
-def atrous_block(net,filters = 8,kernel = 3,dilation = 1,kmap = 2,activation = lrelu,trainable = True,name = 'Atrous_Block'):
+def atrous_block(net,training,features = 8,kernel = 3,dilation = 1,kmap = 2,stride = 1,activation = tf.nn.relu,trainable = True,name = 'Atrous_Block'):
   newnet = []
   with tf.variable_scope(name) as scope:
     for x in range(dilation,kmap * dilation,dilation):
@@ -89,10 +151,11 @@ def atrous_block(net,filters = 8,kernel = 3,dilation = 1,kmap = 2,activation = l
       with tf.variable_scope("ATROUS",reuse = tf.AUTO_REUSE) as scope:
         # Total Kernel visual size: Kernel + ((Kernel - 1) * (Dilation - 1))
         # At kernel = 9 with dilation = 2; 9 + 8 * 1, 17 px
-        layer = conv2d(net,filters = filters, kernel = kernel, dilation_rate = x,reuse = re,trainable = tr)
+        layer = conv2d(net,features = features, kernel = kernel, dilation_rate = x,reuse = re,trainable = tr,padding='SAME')
         newnet.append(layer)
 
     net = delist(newnet)
+    net = bn_conv2d(net,training,features = features,kernel = stride,stride = stride,trainable = trainable,name = 'GradientDisrupt',activation = tf.nn.relu)
     return net
 
 
@@ -124,6 +187,8 @@ def l2loss(loss):
 # Function to compute Mean Square Error loss
 def mse_loss(labels,logits):
   with tf.variable_scope('Mean_Square_Error') as scope:
+    labels = tf.squeeze(labels)
+    logits = tf.squeeze(logits)
     loss = tf.losses.mean_squared_error(labels,logits)
     tf.summary.scalar('MSE_Loss',loss)
     loss = l2loss(loss)
@@ -163,3 +228,81 @@ def miou(labels,logits):
     _miou,op  = miou
     tf.summary.scalar('MIOU',_miou)
     return miou
+
+# Relative error calculation for counting
+# |Lab - Log| / Possible Classes
+def count_rel_err(labels,logits,global_step):
+  with tf.variable_scope("rel_err_calc") as scope:
+    labels = tf.cast(labels,tf.float32)
+    logits = tf.cast(logits,tf.float32)
+    sum_acc= tf.Variable(0,dtype = tf.float32,name = 'Sum_Rel_Err')
+    g_step = tf.cast(global_step,tf.float32)
+
+    err    = tf.subtract(labels,logits)
+    err    = tf.abs(err)
+    rel_err= tf.divide(err,FLAGS.num_count_classes) 
+    rel_err= tf.minimum(1.0,rel_err)
+    rel_err   = tf.squeeze(rel_err)
+    if(FLAGS.batch_size > 1):
+      rel_err   = tf.reduce_mean(rel_err,-1)
+    update = tf.assign_add(sum_acc,rel_err)
+    value  = sum_acc / g_step
+
+    #tf.summary.scalar('Relative_Error',rel_err)
+    tf.summary.scalar('Relative_Error',value)
+
+    return rel_err,update
+
+# Relative Accuracy calculation, I don't like this!
+# |Lab - Log| / Lab
+def count_rel_acc(labels,logits,global_step):
+  with tf.variable_scope("rel_acc_calc") as scope:
+    labels = tf.cast(labels,tf.float32)
+    logits = tf.cast(logits,tf.float32)
+    g_step = tf.cast(global_step,tf.float32)
+    sum_acc= tf.Variable(0,dtype = tf.float32,name = 'Sum_Rel_Acc')
+
+    l_min = tf.minimum(labels,logits)
+    l_max = tf.maximum(labels,logits)
+    rel = tf.divide(tf.abs(tf.subtract(logits,labels)),labels)
+
+    zero = tf.constant(0,dtype=tf.float32,name='zero')
+    one  = tf.constant(1,dtype=tf.float32,name='one')
+    full_zeros = tf.zeros((FLAGS.batch_size),tf.float32)
+    full_zeros = tf.squeeze(full_zeros)
+    full_ones  = tf.ones((FLAGS.batch_size),tf.float32)
+    full_ones  = tf.squeeze(full_ones)
+    full_false = []
+    for x in range(FLAGS.batch_size):
+      full_false.append(False)
+    full_false = tf.convert_to_tensor(full_false)
+    full_false = tf.squeeze(full_false)
+
+    # Get where NAN, inf, and logits is zero
+    nans  = tf.is_nan(rel)
+    infs  = tf.is_inf(rel)
+    zeros = tf.equal(logits,zero)
+
+    #If its a zero, get the NaN position, otherwise false.
+    z_nan = tf.where(zeros,nans,full_false)
+    z_inf = tf.where(zeros,infs,full_false)
+    # Set to 1
+    rel   = tf.where(z_nan,full_ones,rel)
+    rel   = tf.where(z_inf,full_ones,rel)
+
+    # Any leftover NaN or inf is where we counted wrong, so the rel acc is zero.
+    nans  = tf.is_nan(rel)
+    infs  = tf.is_inf(rel)
+    rel   = tf.where(nans,full_zeros,rel)
+    rel   = tf.where(infs,full_zeros,rel)
+
+    # Get the minimum of relative acc or 1/ rel acc
+    rel   = tf.minimum(rel,tf.divide(one,rel))
+
+    rel = tf.reduce_mean(rel,-1)
+
+    update = tf.assign_add(sum_acc,rel)
+    value  = tf.divide(sum_acc,g_step)
+
+    tf.summary.scalar('Relative Accuracy',tf.multiply(value,100))
+    return rel,update
