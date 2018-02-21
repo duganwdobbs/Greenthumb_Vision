@@ -8,9 +8,6 @@ import spec_ops      as     stf
 
 from multiprocessing import Process
 from inspector       import inspect
-from util            import factors
-from util            import ImageToPatch
-from util            import PatchToImage
 from tfrecord        import inputs
 from tfrecord        import sizes
 
@@ -55,12 +52,12 @@ def training(global_step,loss,train_vars,learning_rate = .001):
         tf.summary.scalar("Learning_Rate",learning_rate)
 
       optomizer = tf.train.RMSPropOptimizer(learning_rate,momentum = .8, epsilon = 1e-5)
-      train     = optomizer.minimize(loss,var_list = train_vars,global_step=global_step)
+      train     = optomizer.minimize(loss,var_list = train_vars)
 
       return train
 
 # The segmentation network.
-def inference(images,p_lab,d_lab,training,name,trainable = True):
+def inference(global_step,images,p_lab,d_lab,training,name,trainable = True):
   with tf.variable_scope(name) as scope:
     # Preform some image preprocessing
     net = images
@@ -69,68 +66,98 @@ def inference(images,p_lab,d_lab,training,name,trainable = True):
     net = batch_norm(net,training,trainable)
     # If we receive image channels in a format that shouldn't be normalized,
     #   that goes here.
+    with tf.variable_scope('Process_Network'):
+      # Run two dense reduction modules to reduce the number of parameters in
+      #   the network and for low parameter feature extraction.
+      net = stf.dense_reduction(net,training,filters = 4, kernel = 3, stride = 2,
+                                activation=tf.nn.leaky_relu,trainable=trainable,
+                                name = 'Dense_Block_1')
+      net = stf.dense_reduction(net,training,filters = 8, kernel = 3, stride = 2,
+                                activation=tf.nn.leaky_relu,trainable=trainable,
+                                name = 'Dense_Block_2')
 
-    # Run three dense reduction modules to reduce the number of parameters in
-    #   the network and for low parameter feature extraction.
-    net = stf.dense_reduction(net,training,trainable,...,...)
-    net = stf.dense_reduction(net,training,trainable,...,...)
-    net = stf.dense_reduction(net,training,trainable,...,...)
+      # Run the network over some resnet modules, including reduction
+      #   modules in order to further reduce the parameters and have a powerful,
+      #   proven network architecture.
+      net = stf.resnet_a(net,training,trainable,name='Spectral_Resnet_A_1')
+      net = stf.dense_reduction(net,training,filters =16, kernel = 3, stride = 2,
+                                activation=tf.nn.leaky_relu,trainable=trainable,
+                                name = 'Dense_Block_3')
 
-    # Run the network over some resnet modules, including two resnet reduction
-    #   modules in order to further reduce the parameters and have a powerful,
-    #   proven network architecture.
-    net = stf.resnet_a(net)
-    net = stf.resnet_b(net)
-    net = stf.resnet_reduction(net)
-    net = stf.resnet_b(net)
-    net = stf.resnet_reduction(net)
-    net = stf.resnet_a(net)
-    net = stf.conv2d(net,128,1)
+      net = stf.resnet_a(net,training,trainable,name='Spectral_Resnet_A_2')
+      net = stf.resnet_a(net,training,trainable,name='Spectral_Resnet_A_3')
+      net = stf.dense_reduction(net,training,filters =24, kernel = 3, stride = 2,
+                                activation=tf.nn.leaky_relu,trainable=trainable,
+                                name = 'Dense_Block_5')
 
-    # We're leaving the frequency domain in order to preform fully connected
-    #    inferences. Fully connected inferences do not work with imaginary
-    #    numbers. The error would always have an i/j term that will not be able
-    #    to generate a correct gradient for.
-    net = stf.ifft2d(net)
+      net = stf.resnet_b(net,training,trainable,name='Spectral_Resnet_B_1')
+      net = stf.resnet_b(net,training,trainable,name='Spectral_Resnet_B_2')
+      net = stf.dense_reduction(net,training,filters =28, kernel = 3, stride = 2,
+                                activation=tf.nn.leaky_relu,trainable=trainable,
+                                name = 'Dense_Block_6')
 
-    # Theoretically, the network will be 8x8x128, for 8192 neurons in the first
-    #    fully connected network.
-    net = util.squish_to_batch(net)
-    _b,neurons = net.get_shape().as_list()
+      net = stf.resnet_c(net,training,trainable,name='Spectral_Resnet_C_1')
+      net = stf.resnet_c(net,training,trainable,name='Spectral_Resnet_C_1')
 
-    # Fully connected network with number of neurons equal to the number of
-    #    parameters in the network at this point
-    net = tf.layers.dense(net,neurons)
+      # We're leaving the frequency domain in order to preform fully connected
+      #    inferences. Fully connected inferences do not work with imaginary
+      #    numbers. The error would always have an i/j term that will not be able
+      #    to generate a correct gradient for.
+      net = stf.ifft2d(net)
 
-    # Fully connected layer to extract the plant classification
-    #    NOTE: This plant classification will be used to extract the proper
-    #          disease classification matrix
-    p_log      = tf.layers.dense(net,FLAGS.num_plant_classes)
+    with tf.variable_scope('Plant_Neurons') as scope:
+      # Theoretically, the network will be 8x8x128, for 8192 neurons in the first
+      #    fully connected network.
+      net = util.squish_to_batch(net)
+      _b,neurons = net.get_shape().as_list()
 
-    # Construct a number of final layers for diseases equal to the number of
-    # plants.
-    d_net = []
-    for x in range(FLAGS.num_plant_classes):
-      chan = tf.layers.dense(net,FLAGS.num_disease_classes,name = 'Disease_%d'%x)
-      d_net.append(chan)
-    d_net = delist(d_net)
+      # Fully connected network with number of neurons equal to the number of
+      #    parameters in the network at this point
+      net = tf.layers.dense(net,neurons)
 
-    # If we're training, we want to not use the plant network output, rather the
-    #    plant label. This ensures that the disease layers train properly.
-    #    NOTE: The disease loss function only trains based on this final layer.
-    #          IE: The disease gradient does not flow through the whole network,
-    #              using the plant network as its preprocessing.
-    index = d_label if training else tf.argmax(p_log)
+      # Fully connected layer to extract the plant classification
+      #    NOTE: This plant classification will be used to extract the proper
+      #          disease classification matrix
+      p_log      = tf.layers.dense(net,FLAGS.num_plant_classes)
 
-    # Extract the disease logit
-    d_log = d_net[index]
+    with tf.variable_scope('Disease_Neurons') as scope:
+      # Construct a number of final layers for diseases equal to the number of
+      # plants.
+      d_net = []
+      for x in range(FLAGS.num_plant_classes):
+        chan = tf.layers.dense(net,FLAGS.num_disease_classes,name = 'Disease_%d'%x)
+        d_net.append(chan)
+      d_net = delist(d_net)
+
+      # If we're training, we want to not use the plant network output, rather the
+      #    plant label. This ensures that the disease layers train properly.
+      #    NOTE: The disease loss function only trains based on this final layer.
+      #          IE: The disease gradient does not flow through the whole network,
+      #              using the plant network as its preprocessing.
+      index = d_label if training else tf.argmax(p_log)
+
+      # Extract the disease logit
+      d_log = d_net[index]
 
     # Get the losses and metrics
-    p_loss,p_metrics = metrics(labels = p_lab,logits = p_log,name = "Plant_Metrics")
-    d_loss,d_metrics = metrics(labels = d_lab,logits = d_log,name = "Disease_Metrics")
-    metrics = (p_metrics,d_metrics)
-    
-    return p_logit,d_logit,p_loss,d_loss,metrics
+
+  with tf.variable_scope('Metrics') as scope:
+    p_acc  = ops.accuracy(p_lab,d_log,name = 'Plant_Accuracy')
+    d_acc  = ops.accuracy(d_lab,d_log,name = 'Disease_Accuracy')
+    p_loss = ops.xentropy_loss(labels = p_lab,logits = p_log,name = "Plant_Metrics")
+    d_loss = ops.xentropy_loss(labels = d_lab,logits = d_log,name = "Disease_Metrics")
+
+    p_vars = [var for var in tf.trainable_variables() if 'Process_Network' in var.name or 'Plant_Neurons' in var.name]
+    d_vars = [var for var in tf.trainable_variables() if 'Disease_Neurons' in var.name]
+
+  with tf.variable_scope('Trainer') as scope:
+    train = tf.assign_add(global_step,1,name = 'Global_Step')
+    if training:
+      p_train = trainer(p_loss,p_vars)
+      d_train = trainer(d_loss,d_vars)
+      train   = (train,p_train,d_train)
+
+  return p_logit,d_logit,train,metrics
 
 # Runs the tape training.
 def train(train_run = True, restore = False):
@@ -146,20 +173,14 @@ def train(train_run = True, restore = False):
 
       # Build the network from images, inference, loss, and backpropogation.
       with tf.variable_scope("Net_Inputs") as scope:
-        images, p_lab, d_lab = inputs(train=train_run,batch_size=FLAGS.batch_size,num_epochs=FLAGS.num_epochs,num_classes = FLAGS.num_classes)
+        images, p_lab, d_lab = inputs(global_step,train=train_run,batch_size=FLAGS.batch_size,num_epochs=FLAGS.num_epochs,num_classes = FLAGS.num_classes)
 
-      p_log,d_log,loss,metrics = p_inference(images,p_lab,d_lab,training = train_run,name = FLAGS.net_name,trainable = True)
+      p_log,d_log,train,metrics = p_inference(images,p_lab,d_lab,training = train_run,name = FLAGS.net_name,trainable = True)
 
-      train_vars = [var for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope = FLAGS.net_name) if var in tf.trainable_variables()]
-      write_vars = [var for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES) if 'batch_norm' in var.name]
-      if train_run:
-        train = training(global_step,loss,train_vars)
-      else:
-        train = tf.assign_add(global_step,1,name = 'Global_Step')
+      b_norm_vars = [var for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES) if 'batch_norm' in var.name]
 
       # Save operations
       save_images = imsave(images,names = 'Images')
-
       save_imgs = [save_images]
 
       # Initialize all variables in network
@@ -188,13 +209,14 @@ def train(train_run = True, restore = False):
       writer         = tf.summary.FileWriter(filestr,sess.graph)
 
       # Setting up the checkpoint saver and training coordinator for the network
-      saver          = tf.train.Saver(train_vars + write_vars)
+      saver          = tf.train.Saver(tf.trainable_variables + b_norm_vars)
       if(restore or not train_run):
         # inspect(tf.train.latest_checkpoint(FLAGS.run_dir))
         saver.restore(sess,tf.train.latest_checkpoint(FLAGS.run_dir))
         if not train_run:
           # Save the loaded testing checkpoint in the log folder.
           saver.save(sess,logstr)
+      saver          = tf.train.Saver(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES))
 
       # Starts the input generator
       coord          = tf.train.Coordinator()
@@ -222,7 +244,7 @@ def train(train_run = True, restore = False):
           if not train_run:
             for x in range(len(_imgs)):
               for d in range(FLAGS.batch_size):
-                with open(filestr + '%d_plant_%d_%d_disease_%d_%d'%(step,x,_p_lab[d],_p_log[d],_d_lab[d],_d_log[d]) + im_t[x] + '.png','wb+') as f:
+                with open(filestr + '%d_plant_%d_%d_disease_%d_%d'%(step,x,_p_lab[d],_p_log[d],_d_lab[d],_d_log[d]) + '_img.png','wb+') as f:
                   f.write(_imgs[x][d])
 
           if step%100 == 0 and train_run:
@@ -233,7 +255,7 @@ def train(train_run = True, restore = False):
         if train_run:
           saver.save(sess,savestr,global_step = step)
           saver.save(sess,logstr,global_step = step)
-      except tf.errors.OutOfRangeError:
+      # except tf.errors.OutOfRangeError:
         print("Sumthin messed up man.")
       finally:
         if train_run:

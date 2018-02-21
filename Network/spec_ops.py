@@ -64,7 +64,7 @@ def spec_pool(net,stride):
   return net
 
 
-         '''~~~~ FROM HERE ON, ADVANCED OPERATIONS ~~~~'''
+#         '''~~~~ FROM HERE ON, ADVANCED OPERATIONS ~~~~'''
 
 def dense_reduction(net,training, filters = 2, kernel = 3, kmap = 5, stride = 1,
                 activation = lrelu, trainable = True,name = 'Dense_Block'):
@@ -78,7 +78,7 @@ def dense_reduction(net,training, filters = 2, kernel = 3, kmap = 5, stride = 1,
       net = spec_pool(net,stride)
     return net
 
-def inception_block_a(net,training,trainable):
+def inception_block_a(net,training,trainable,name):
   with tf.variable_scope(name) as scope:
     with tf.variable_scope('Branch_1') as scope:
       chan_1 = net
@@ -105,7 +105,7 @@ def inception_block_a(net,training,trainable):
 
   return net
 
-def inception_block_b(net,training,trainable):
+def inception_block_b(net,training,trainable,name):
   with tf.variable_scope(name) as scope:
     with tf.variable_scope('Branch_1') as scope:
       chan_1 = net
@@ -136,7 +136,7 @@ def inception_block_b(net,training,trainable):
   return net
 
 
-def inception_block_c(net,training,trainable):
+def inception_block_c(net,training,trainable,name):
   with tf.variable_scope(name) as scope:
     with tf.variable_scope('Branch_1') as scope:
       chan_1   = net
@@ -167,12 +167,3 @@ def inception_block_c(net,training,trainable):
     net = ops.delist(net)
 
   return net
-
-def inception_reduction_a(net,training,trainable):
-  with tf.variable_scope(name) as scope:
-    with tf.variable_scope('Branch_1') as scope:
-      chan_1 = spec_conv2d(chan_1,
-
-    with tf.variable_scope('Branch_2') as scope:
-
-    with tf.variable_scope('Branch_3') as scope:

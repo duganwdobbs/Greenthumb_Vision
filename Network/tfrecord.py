@@ -15,8 +15,8 @@ flags = tf.app.flags
 FLAGS = flags.FLAGS
 
 # Constants used for dealing with the files, matches convert_to_records.
-TRAIN_FILE =
-VALIDATION_FILE =
+TRAIN_FILE      = 'PlantVision-Train.tfrecords'
+VALIDATION_FILE = 'PlantVision-Test.tfrecords'
 
 # Helper functions for defining tf types
 def _bytes_feature(value):
@@ -48,22 +48,15 @@ def write_image_label_pairs_to_tfrecord(filename_pairs, tfrecords_filename):
     writer = tf.python_io.TFRecordWriter(tfrecords_filename)
     print(tfrecords_filename)
     i = 0
-    for img_path, lab_path, dat_path in filename_pairs:
+    for img_path, p_label, d_label in filename_pairs:
 
         img = Image.open(img_path)
         img = img.resize((imgW,imgH),Image.NEAREST)
         img = np.asarray(img)
 
-        p_label =
-        d_label =
-
-        count = 0
-        with open(dat_path,'r') as cnt_file:
-          count = np.asarray(cnt_file.read())
-
-        img       =     img.astype(np.uint8)
-        p_label   = p_label.astype(np.uint8)
-        d_label   = d_label.astype(np.uint8)
+        img       =                img.astype(np.uint8)
+        p_label   =  np.array(p_label).astype(np.uint8)
+        d_label   =  np.array(d_label).astype(np.uint8)
 
         img_raw   =     img.tobytes()
         p_label_r = p_label.tobytes()
@@ -85,7 +78,8 @@ def write_image_label_pairs_to_tfrecord(filename_pairs, tfrecords_filename):
         writer.write(example.SerializeToString())
 
         i  = i + 4
-        print("Processed " + str(i) + " images...")
+        if(i%1000 == 0):
+          print("Processed " + str(i) + " images...")
     print("Done!")
 
     writer.close()
