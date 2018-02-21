@@ -1,6 +1,9 @@
 import os
 import time
 import platform
+import ops
+
+import spec_ops      as stf
 
 import numpy         as     np
 import tensorflow    as     tf
@@ -11,7 +14,7 @@ from inspector       import inspect
 from tfrecord        import inputs
 from tfrecord        import sizes
 
-imgW,imgH,save_stride = sizes()
+imgW,imgH = sizes()
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -61,9 +64,10 @@ def inference(global_step,images,p_lab,d_lab,training,name,trainable = True):
   with tf.variable_scope(name) as scope:
     # Preform some image preprocessing
     net = images
-    net = delist(net)
-    net = tf.cast(net,tf.float32)
-    net = batch_norm(net,training,trainable)
+    net = ops.delist(net)
+    net = tf.cast(net,tf.complex64)
+    net = ops.batch_norm(net,training,trainable)
+    net = tf.fft2d(net)
     # If we receive image channels in a format that shouldn't be normalized,
     #   that goes here.
     with tf.variable_scope('Process_Network'):
@@ -103,7 +107,7 @@ def inference(global_step,images,p_lab,d_lab,training,name,trainable = True):
       #    inferences. Fully connected inferences do not work with imaginary
       #    numbers. The error would always have an i/j term that will not be able
       #    to generate a correct gradient for.
-      net = stf.ifft2d(net)
+      net = tf.ifft2d(net)
 
     with tf.variable_scope('Plant_Neurons') as scope:
       # Theoretically, the network will be 8x8x128, for 8192 neurons in the first
@@ -127,7 +131,7 @@ def inference(global_step,images,p_lab,d_lab,training,name,trainable = True):
       for x in range(FLAGS.num_plant_classes):
         chan = tf.layers.dense(net,FLAGS.num_disease_classes,name = 'Disease_%d'%x)
         d_net.append(chan)
-      d_net = delist(d_net)
+      d_net = ops.delist(d_net)
 
       # If we're training, we want to not use the plant network output, rather the
       #    plant label. This ensures that the disease layers train properly.
@@ -173,9 +177,9 @@ def train(train_run = True, restore = False):
 
       # Build the network from images, inference, loss, and backpropogation.
       with tf.variable_scope("Net_Inputs") as scope:
-        images, p_lab, d_lab = inputs(global_step,train=train_run,batch_size=FLAGS.batch_size,num_epochs=FLAGS.num_epochs,num_classes = FLAGS.num_classes)
+        images, p_lab, d_lab = inputs(global_step,train=train_run,batch_size=FLAGS.batch_size,num_epochs=FLAGS.num_epochs)
 
-      p_log,d_log,train,metrics = p_inference(images,p_lab,d_lab,training = train_run,name = FLAGS.net_name,trainable = True)
+      p_log,d_log,train,metrics = inference(global_step,images,p_lab,d_lab,training = train_run,name = FLAGS.net_name,trainable = True)
 
       b_norm_vars = [var for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES) if 'batch_norm' in var.name]
 

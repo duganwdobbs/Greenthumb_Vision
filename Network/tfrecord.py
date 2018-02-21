@@ -84,7 +84,7 @@ def write_image_label_pairs_to_tfrecord(filename_pairs, tfrecords_filename):
 
     writer.close()
 
-def read_decode(tfrecord_filenames_queue, num_classes):
+def read_decode(tfrecord_filenames_queue):
     """Return image/label tensors that are created by reading tfrecord file.
     The function accepts tfrecord filenames queue as an input which is usually
     can be created using tf.train.string_input_producer() where filename
@@ -110,13 +110,13 @@ def read_decode(tfrecord_filenames_queue, num_classes):
       serialized_example,
       features={
         'image_raw': tf.FixedLenFeature([], tf.string),
-        'label_raw': tf.FixedLenFeature([], tf.string),
-        'count_raw': tf.FixedLenFeature([], tf.string)
+        'p_label_r': tf.FixedLenFeature([], tf.string),
+        'd_label_r': tf.FixedLenFeature([], tf.string)
         })
 
     image = tf.decode_raw(features['image_raw'], tf.uint8)
-    label = tf.decode_raw(features['p_label_r'], tf.uint8)
-    count = tf.decode_raw(features['d_label_r'], tf.uint8)
+    p_label = tf.decode_raw(features['p_label_r'], tf.uint8)
+    d_label = tf.decode_raw(features['d_label_r'], tf.uint8)
 
     image_shape = tf.stack([imgH, imgW, 3])
 
@@ -124,11 +124,12 @@ def read_decode(tfrecord_filenames_queue, num_classes):
     image = tf.cast(image,tf.float32)
     image = tf.divide(image,255)
 
-    count = tf.reshape(count, [1])
+    p_label = tf.reshape(p_label,[1])
+    d_label = tf.reshape(d_label,[1])
 
-    return image, label, count
+    return image, p_label, d_label
 
-def inputs(train):
+def inputs(global_step,train,batch_size,num_epochs):
   """Reads input data num_epochs times.
   Args:
     train: Selects between the training (True) and validation (False) data.
@@ -150,7 +151,7 @@ def inputs(train):
   with tf.name_scope('input'):
     filename_queue = tf.train.string_input_producer([filename], num_epochs=num_epochs)
 
-    image, label, count = read_decode(filename_queue,FLAGS.num_classes)
+    image, p_label, d_label = read_decode(filename_queue)
 
     if train:
         images, p_label, d_label = tf.train.shuffle_batch(

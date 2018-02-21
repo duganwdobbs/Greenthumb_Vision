@@ -4,7 +4,6 @@ import util
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
-lrelu = tf.nn.leaky_relu
 
 flags.DEFINE_integer('bn_scope'       , 0 , 'Variable for BN Scope')
 flags.DEFINE_integer('spec_conv_scope', 0 , 'Variable for Conv2d Scope')
@@ -35,7 +34,7 @@ def create_bias(filters):
 
 # Spectral conv2d, assumes net comes in as a representation of a FFT
 def spec_conv2d(net, training, filters, kernel = 3, stride = 1,
-                activation = lrelu, trainable = True, name = None):
+                activation = ops.lrelu, trainable = True, name = None):
   if name is None:
     name = "spec_conv2d_%d"%FLAGS.spec_conv_scope
   if net.dtype is not tf.complex64:
@@ -47,7 +46,7 @@ def spec_conv2d(net, training, filters, kernel = 3, stride = 1,
            # TODO: Note, function to create vars must work with reuse and trainable
     b    = create_bias(filtrs)
     net  = net * filt + b
-    net  = ops.batch_norm(net,training,trainable,tf.nn.leaky_relu)
+    net  = ops.batch_norm(net,training,trainable,ops.lrelu)
     if stride is not 1:
       net = spec_pool(net,stride)
     return
@@ -67,7 +66,7 @@ def spec_pool(net,stride):
 #         '''~~~~ FROM HERE ON, ADVANCED OPERATIONS ~~~~'''
 
 def dense_reduction(net,training, filters = 2, kernel = 3, kmap = 5, stride = 1,
-                activation = lrelu, trainable = True,name = 'Dense_Block'):
+                activation = ops.lrelu, trainable = True,name = 'Dense_Block'):
   with tf.variable_scope(name) as scope:
     net = delist(net)
     for n in range(kmap):

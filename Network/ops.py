@@ -11,29 +11,41 @@ def delist(net):
   return net
 
 def lrelu(x):
-  with tf.variable_scope('lrelu'):
+  with tf.variable_scope('lrelu') as scope:
+    if net.dtype is not tf.complex64:
     return tf.maximum(0.1 * x, x)
+  else:
+    return x
+
+def relu(x):
+  with tf.variable_scope('relu') as scope:
+    if net.dtype is not tf.complex64:
+      zero = tf.complex(0.0,0.0)
+      return tf.maximum(zero, x)
+    else:
+      return x
 
 def linear(x):
   return x
 
-def conv2d(net, features, kernel = 3, stride = 1, dilation_rate = 1, activation = tf.nn.relu, padding = 'SAME', trainable = True, name = None, reuse = None):
+def conv2d(net, features, kernel = 3, stride = 1, dilation_rate = 1, activation = relu, padding = 'SAME', trainable = True, name = None, reuse = None):
   net = tf.layers.conv2d(delist(net),features,kernel,stride,padding,dilation_rate = dilation_rate, activation = activation,trainable = trainable, name = name, reuse = reuse)
   return net
 
-def bn_conv2d(net, training, features, kernel = 3, stride = 1, dilation_rate = 1, activation = tf.nn.relu, use_bias = False, padding = 'SAME', trainable = True, name = None, reuse = None):
+def bn_conv2d(net, training, features, kernel = 3, stride = 1, dilation_rate = 1, activation = relu, use_bias = False, padding = 'SAME', trainable = True, name = None, reuse = None):
   with tf.variable_scope('BN_Conv_%d'%(FLAGS.conv_scope)) as scope:
     FLAGS.conv_scope+=1
     net = conv2d(delist(net), features, kernel, stride, dilation_rate, activation, padding, trainable, name, reuse)
     net = batch_norm(net,training,trainable,activation)
     return net
 
-def batch_norm(net,training,trainable,activation = tf.nn.relu):
+def batch_norm(net,training,trainable,activation = relu):
   with tf.variable_scope('Batch_Norm_%d'%(FLAGS.bn_scope)):
     FLAGS.bn_scope+=1
-    if activation is None:
-      activation = linear
-    net = activation(tf.layers.batch_normalization(delist(net),training = training, trainable = trainable))
+    # net = activation(tf.contrib.layers.batch_norm(delist(net),is_training = training, trainable = trainable))
+    if activation is not None:
+      net = activation(net)
+
     return net
 
 def avg_pool(net, kernel = 3, stride = 1, padding = 'SAME', name = None):
@@ -42,10 +54,10 @@ def avg_pool(net, kernel = 3, stride = 1, padding = 'SAME', name = None):
 def max_pool(net, kernel = 3, stride = 3, padding = 'SAME', name = None):
   return tf.layers.max_pooling2d(net,kernel,stride,padding=padding,name=name)
 
-def conv2d_trans(net, features, kernel, stride, activation = tf.nn.relu,padding = 'SAME', trainable = True, name = None):
+def conv2d_trans(net, features, kernel, stride, activation = relu,padding = 'SAME', trainable = True, name = None):
   return tf.layers.conv2d_transpose(net,features,kernel,stride,activation=activation,padding=padding,trainable=trainable,name=name)
 
-def deconv(net, features = 3, kernel = 3, stride = 2, activation = tf.nn.relu,padding = 'SAME', trainable = True, name = None):
+def deconv(net, features = 3, kernel = 3, stride = 2, activation = relu,padding = 'SAME', trainable = True, name = None):
   return tf.layers.conv2d_transpose(net,features,kernel,stride,activation=activation,padding=padding,trainable=trainable,name=name)
 
 def modified_resnet_a(net,training,trainable,name):
@@ -87,7 +99,7 @@ def modified_reduction_model(net,training,trainable,name):
 
     return net
 
-def deconvxy(net,training, stride = 2,features = None, activation = tf.nn.relu,padding = 'SAME', trainable = True, name = 'Deconv_xy'):
+def deconvxy(net,training, stride = 2,features = None, activation = relu,padding = 'SAME', trainable = True, name = 'Deconv_xy'):
   with tf.variable_scope(name) as scope:
 
     net = delist(net)
@@ -113,7 +125,7 @@ def deconvxy(net,training, stride = 2,features = None, activation = tf.nn.relu,p
     return net
 
 def dense_block(net,training, features = 2, kernel = 3, kmap = 5, stride = 1,
-                activation = tf.nn.relu, padding = 'SAME', trainable = True,
+                activation = relu, padding = 'SAME', trainable = True,
                 name = 'Dense_Block', prestride_return = True,use_max_pool = True):
   with tf.variable_scope(name) as scope:
 
@@ -140,7 +152,7 @@ def dense_block(net,training, features = 2, kernel = 3, kmap = 5, stride = 1,
     else:
       return net
 
-def atrous_block(net,training,features = 8,kernel = 3,dilation = 1,kmap = 2,stride = 1,activation = tf.nn.relu,trainable = True,name = 'Atrous_Block'):
+def atrous_block(net,training,features = 8,kernel = 3,dilation = 1,kmap = 2,stride = 1,activation = relu,trainable = True,name = 'Atrous_Block'):
   newnet = []
   with tf.variable_scope(name) as scope:
     for x in range(dilation,kmap * dilation,dilation):
@@ -155,7 +167,7 @@ def atrous_block(net,training,features = 8,kernel = 3,dilation = 1,kmap = 2,stri
         newnet.append(layer)
 
     net = delist(newnet)
-    net = bn_conv2d(net,training,features = features,kernel = stride,stride = stride,trainable = trainable,name = 'GradientDisrupt',activation = tf.nn.relu)
+    net = bn_conv2d(net,training,features = features,kernel = stride,stride = stride,trainable = trainable,name = 'GradientDisrupt',activation = relu)
     return net
 
 
@@ -240,7 +252,7 @@ def count_rel_err(labels,logits,global_step):
 
     err    = tf.subtract(labels,logits)
     err    = tf.abs(err)
-    rel_err= tf.divide(err,FLAGS.num_count_classes) 
+    rel_err= tf.divide(err,FLAGS.num_count_classes)
     rel_err= tf.minimum(1.0,rel_err)
     rel_err   = tf.squeeze(rel_err)
     if(FLAGS.batch_size > 1):
