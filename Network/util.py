@@ -138,5 +138,9 @@ def showimgs(img,lab):
   lab_p.imshow(lab)
   plt.show()
 
+def squish_to_batch(net):
+  batch, input_height, input_width, channels = net.get_shape().as_list()
+  net = tf.reshape(net,[batch,input_height*input_width*channels])
+  return net
 
 # print(s_factors(100))

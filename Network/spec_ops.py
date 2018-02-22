@@ -2,27 +2,36 @@ import tensorflow as tf
 import ops
 import util
 
+from ops import delist
+
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('bn_scope'       , 0 , 'Variable for BN Scope')
-flags.DEFINE_integer('spec_conv_scope', 0 , 'Variable for Conv2d Scope')
+# flags.DEFINE_integer('bn_scope'       , 0 , 'Variable for BN Scope')
+# flags.DEFINE_integer('spec_conv_scope', 0 , 'Variable for Conv2d Scope')
 
 def init():
   FLAGS.bn_scope        = 0
   FLAGS.spec_conv_scope = 0
 
+def fft(net):
+  net = tf.transpose(net, [0, 3, 1, 2])  # batch, channel, height, width
+  net_fft = tf.batch_fft2d(tf.complex(net, 0.0 * net))
+
+  net_fft = tf.expand_dims(net_fft, 2)  # batch, channels, filters, height, width
+  net_fft = tf.tile(net_fft, [1, 1, filters, 1, 1])
+
 # Utility function to get shape of a 4 dim network
-def get_shape(source):
-  batch, input_height, input_width, channels = source.get_shape().as_list()
+def get_shape(net):
+  batch, input_height, input_width, channels = net.get_shape().as_list()
   return batch, input_height, input_width, channels
 
 # Creates a filter for a spectral convolution
 def create_filter(filters,net):
-  batch, height, width, channels = source.get_shape().as_list()
+  batch, height, width, channels = net.get_shape().as_list()
   r = tf.truncated_normal([channels,filters,height,width],mean=0,stddev=.01)
   i = tf.truncated_normal([channels,filters,height,width],mean=0,stddev=.01)
-  filt = tf.conplex(r,i)
+  filt = tf.complex(r,i)
   return filt
 
 # Creates biases for a spectral convolution
@@ -41,11 +50,11 @@ def spec_conv2d(net, training, filters, kernel = 3, stride = 1,
     raise Exception("Spectral Conv2d received image not in complex64")
   # Need to define how to reuse
   with tf.variable_scope(name) as scope:
-    filt = create_filter(net,)
+    filt = create_filter(filters,net)
            # TODO: Note, dilation rate must be maintained
            # TODO: Note, function to create vars must work with reuse and trainable
-    b    = create_bias(filtrs)
-    net  = net * filt + b
+    b    = create_bias(filters)
+    net  = tf.nn.bias_add(tf.matmul(net, filt), b)
     net  = ops.batch_norm(net,training,trainable,ops.lrelu)
     if stride is not 1:
       net = spec_pool(net,stride)

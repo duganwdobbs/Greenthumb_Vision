@@ -3,6 +3,9 @@ import tensorflow as tf
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 
+flags.DEFINE_integer('conv_scope',0,'Incrementer for convolutional scopes')
+flags.DEFINE_integer('bn_scope'  ,0,'Incrementer for batch norm scopes')
+
 bn_scope = 0
 
 def delist(net):
@@ -12,37 +15,36 @@ def delist(net):
 
 def lrelu(x):
   with tf.variable_scope('lrelu') as scope:
-    if net.dtype is not tf.complex64:
-    return tf.maximum(0.1 * x, x)
-  else:
-    return x
+    if x.dtype is not tf.complex64:
+      return tf.nn.leaky_relu(x)
+    else:
+      return x
 
 def relu(x):
   with tf.variable_scope('relu') as scope:
-    if net.dtype is not tf.complex64:
-      zero = tf.complex(0.0,0.0)
-      return tf.maximum(zero, x)
+    if x.dtype is not tf.complex64:
+      return tf.nn.relu(x)
     else:
       return x
 
 def linear(x):
   return x
 
-def conv2d(net, features, kernel = 3, stride = 1, dilation_rate = 1, activation = relu, padding = 'SAME', trainable = True, name = None, reuse = None):
-  net = tf.layers.conv2d(delist(net),features,kernel,stride,padding,dilation_rate = dilation_rate, activation = activation,trainable = trainable, name = name, reuse = reuse)
+def conv2d(net, filters, kernel = 3, stride = 1, dilation_rate = 1, activation = relu, padding = 'SAME', trainable = True, name = None, reuse = None):
+  net = tf.layers.conv2d(delist(net),filters,kernel,stride,padding,dilation_rate = dilation_rate, activation = activation,trainable = trainable, name = name, reuse = reuse)
   return net
 
-def bn_conv2d(net, training, features, kernel = 3, stride = 1, dilation_rate = 1, activation = relu, use_bias = False, padding = 'SAME', trainable = True, name = None, reuse = None):
+def bn_conv2d(net, training, filters, kernel = 3, stride = 1, dilation_rate = 1, activation = lrelu, use_bias = False, padding = 'SAME', trainable = True, name = None, reuse = None):
   with tf.variable_scope('BN_Conv_%d'%(FLAGS.conv_scope)) as scope:
     FLAGS.conv_scope+=1
-    net = conv2d(delist(net), features, kernel, stride, dilation_rate, activation, padding, trainable, name, reuse)
+    net = conv2d(delist(net), filters, kernel, stride, dilation_rate, activation, padding, trainable, name, reuse)
     net = batch_norm(net,training,trainable,activation)
     return net
 
 def batch_norm(net,training,trainable,activation = relu):
   with tf.variable_scope('Batch_Norm_%d'%(FLAGS.bn_scope)):
     FLAGS.bn_scope+=1
-    # net = activation(tf.contrib.layers.batch_norm(delist(net),is_training = training, trainable = trainable))
+    net = tf.layers.batch_normalization(delist(net),training = training, trainable = trainable)
     if activation is not None:
       net = activation(net)
 
@@ -54,68 +56,29 @@ def avg_pool(net, kernel = 3, stride = 1, padding = 'SAME', name = None):
 def max_pool(net, kernel = 3, stride = 3, padding = 'SAME', name = None):
   return tf.layers.max_pooling2d(net,kernel,stride,padding=padding,name=name)
 
-def conv2d_trans(net, features, kernel, stride, activation = relu,padding = 'SAME', trainable = True, name = None):
-  return tf.layers.conv2d_transpose(net,features,kernel,stride,activation=activation,padding=padding,trainable=trainable,name=name)
+def conv2d_trans(net, filters, kernel, stride, activation = relu,padding = 'SAME', trainable = True, name = None):
+  return tf.layers.conv2d_transpose(net,filters,kernel,stride,activation=activation,padding=padding,trainable=trainable,name=name)
 
-def deconv(net, features = 3, kernel = 3, stride = 2, activation = relu,padding = 'SAME', trainable = True, name = None):
-  return tf.layers.conv2d_transpose(net,features,kernel,stride,activation=activation,padding=padding,trainable=trainable,name=name)
+def deconv(net, filters = 3, kernel = 3, stride = 2, activation = relu,padding = 'SAME', trainable = True, name = None):
+  return tf.layers.conv2d_transpose(net,filters,kernel,stride,activation=activation,padding=padding,trainable=trainable,name=name)
 
-def modified_resnet_a(net,training,trainable,name):
-  with tf.variable_scope(name) as scope:
-    in_tensor = net
-    in_size   = in_tensor.shape[-1].value
-    left_chan = bn_conv2d(net      ,training,features = 32, kernel = 1)
-
-    midd_chan = bn_conv2d(net      ,training,features = 32, kernel = 1)
-    midd_chan = bn_conv2d(midd_chan,training,features = 32, kernel = 3)
-
-    righ_chan = bn_conv2d(net      ,training,features = 32, kernel = 1)
-    righ_chan = bn_conv2d(righ_chan,training,features = 32, kernel = 3)
-    righ_chan = bn_conv2d(righ_chan,training,features = 32, kernel = 3)
-
-    net = [left_chan,midd_chan,righ_chan]
-
-    net = conv2d(net,features = in_size,kernel = 1, activation = None)
-
-    net = in_tensor * .2 + net
-
-    return net
-
-
-def modified_reduction_model(net,training,trainable,name):
-  with tf.variable_scope(name) as scope:
-    left_chan = max_pool(net,kernel = 3, stride = 2,padding = 'VALID')
-
-    midd_chan = bn_conv2d(net      ,training,features = 192, kernel = 1,)
-    midd_chan = bn_conv2d(midd_chan,training,features = 128, stride = 2,padding = 'VALID')
-
-    righ_chan = bn_conv2d(net      ,training,features = 192, kernel = 1)
-    righ_chan = bn_conv2d(righ_chan,training,features = 128, kernel = (1,7))
-    righ_chan = bn_conv2d(righ_chan,training,features = 128, kernel = (7,1))
-    righ_chan = bn_conv2d(righ_chan,training,features = 128, kernel = 3, stride = 2, padding = 'VALID')
-
-    net = [left_chan,midd_chan,righ_chan]
-    net = delist(net)
-
-    return net
-
-def deconvxy(net,training, stride = 2,features = None, activation = relu,padding = 'SAME', trainable = True, name = 'Deconv_xy'):
+def deconvxy(net,training, stride = 2,filters = None, activation = relu,padding = 'SAME', trainable = True, name = 'Deconv_xy'):
   with tf.variable_scope(name) as scope:
 
     net = delist(net)
 
     kernel = stride * 2 + stride % 2
 
-    if features is None:
-      features = int(net.shape[-1].value / stride)
+    if filters is None:
+      filters = int(net.shape[-1].value / stride)
 
-    netx = deconv(net , features  , kernel = kernel, stride = (stride,1), name = "x",  trainable = trainable)
-    nety = deconv(net , features  , kernel = kernel, stride = (1,stride), name = "y",  trainable = trainable)
+    netx = deconv(net , filters  , kernel = kernel, stride = (stride,1), name = "x",  trainable = trainable)
+    nety = deconv(net , filters  , kernel = kernel, stride = (1,stride), name = "y",  trainable = trainable)
 
-    features = int(features / stride)
+    filters = int(filters / stride)
 
-    netx = deconv(netx, features  , kernel = kernel, stride = (1,stride), name = "xy", trainable = trainable)
-    nety = deconv(nety, features  , kernel = kernel, stride = (stride,1), name = "yx", trainable = trainable)
+    netx = deconv(netx, filters  , kernel = kernel, stride = (1,stride), name = "xy", trainable = trainable)
+    nety = deconv(nety, filters  , kernel = kernel, stride = (stride,1), name = "yx", trainable = trainable)
 
     net  = tf.concat((netx,nety),-1)
 
@@ -124,7 +87,7 @@ def deconvxy(net,training, stride = 2,features = None, activation = relu,padding
 
     return net
 
-def dense_block(net,training, features = 2, kernel = 3, kmap = 5, stride = 1,
+def dense_block(net,training, filters = 2, kernel = 3, kmap = 5, stride = 1,
                 activation = relu, padding = 'SAME', trainable = True,
                 name = 'Dense_Block', prestride_return = True,use_max_pool = True):
   with tf.variable_scope(name) as scope:
@@ -132,7 +95,7 @@ def dense_block(net,training, features = 2, kernel = 3, kmap = 5, stride = 1,
     net = delist(net)
 
     for n in range(kmap):
-      out = conv2d(net,features=features,kernel=kernel,stride=1,activation=activation,padding=padding,trainable=trainable,name = '_map_%d'%n)
+      out = conv2d(net,filters=filters,kernel=kernel,stride=1,activation=activation,padding=padding,trainable=trainable,name = '_map_%d'%n)
       net = tf.concat([net,out],-1,name = '%d_concat'%n)
 
     if FLAGS.batch_norm:
@@ -152,7 +115,7 @@ def dense_block(net,training, features = 2, kernel = 3, kmap = 5, stride = 1,
     else:
       return net
 
-def atrous_block(net,training,features = 8,kernel = 3,dilation = 1,kmap = 2,stride = 1,activation = relu,trainable = True,name = 'Atrous_Block'):
+def atrous_block(net,training,filters = 8,kernel = 3,dilation = 1,kmap = 2,stride = 1,activation = relu,trainable = True,name = 'Atrous_Block'):
   newnet = []
   with tf.variable_scope(name) as scope:
     for x in range(dilation,kmap * dilation,dilation):
@@ -163,11 +126,11 @@ def atrous_block(net,training,features = 8,kernel = 3,dilation = 1,kmap = 2,stri
       with tf.variable_scope("ATROUS",reuse = tf.AUTO_REUSE) as scope:
         # Total Kernel visual size: Kernel + ((Kernel - 1) * (Dilation - 1))
         # At kernel = 9 with dilation = 2; 9 + 8 * 1, 17 px
-        layer = conv2d(net,features = features, kernel = kernel, dilation_rate = x,reuse = re,trainable = tr,padding='SAME')
+        layer = conv2d(net,filters = filters, kernel = kernel, dilation_rate = x,reuse = re,trainable = tr,padding='SAME')
         newnet.append(layer)
 
     net = delist(newnet)
-    net = bn_conv2d(net,training,features = features,kernel = stride,stride = stride,trainable = trainable,name = 'GradientDisrupt',activation = relu)
+    net = bn_conv2d(net,training,filters = filters,kernel = stride,stride = stride,trainable = trainable,name = 'GradientDisrupt',activation = relu)
     return net
 
 
@@ -215,8 +178,8 @@ def log_loss(labels,logits):
     return loss
 
 # Loss function for tape, using cross entropy
-def xentropy_loss(labels,logits):
-  with tf.variable_scope("XEnt_Loss") as scope:
+def xentropy_loss(labels,logits,name = 'Xent_Loss'):
+  with tf.variable_scope(name) as scope:
     labels = tf.cast(labels,tf.int32)
 
     loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels = labels,logits = logits)
@@ -227,8 +190,8 @@ def xentropy_loss(labels,logits):
     return loss
 
 # Absolute accuracy calculation for counting
-def accuracy(labels_flat,logits_flat):
-  with tf.variable_scope("Accuracy") as scope:
+def accuracy(labels_flat,logits_flat,name = 'Accuracy'):
+  with tf.variable_scope(name) as scope:
     accuracy = tf.metrics.accuracy(labels = labels_flat, predictions = logits_flat)
     acc,up = accuracy
     tf.summary.scalar('Accuracy',tf.multiply(acc,100))
@@ -318,3 +281,108 @@ def count_rel_acc(labels,logits,global_step):
 
     tf.summary.scalar('Relative Accuracy',tf.multiply(value,100))
     return rel,update
+
+
+def dense_reduction(net,training, filters = 2, kernel = 3, kmap = 5, stride = 1,
+                activation = lrelu, trainable = True,name = 'Dense_Block'):
+  with tf.variable_scope(name) as scope:
+    net = delist(net)
+    for n in range(kmap):
+      out = bn_conv2d(net, training, filters=filters, kernel=kernel, stride=1,
+                        activation=activation, trainable=trainable, name = '_map_%d'%n)
+      net = tf.concat([net,out],-1,name = '%d_concat'%n)
+    if stride is not 1:
+      net = max_pool(net,stride,stride)
+    return net
+
+def inception_block_a(net,training,trainable,name):
+  with tf.variable_scope(name) as scope:
+    with tf.variable_scope('Branch_1') as scope:
+      chan_1 = net
+      chan_1 = bn_conv2d(chan_1,training,filters = 64,kernel = 1,stride = 1)
+      chan_1 = bn_conv2d(chan_1,training,filters = 96,kernel = 3,stride = 1)
+      chan_1 = bn_conv2d(chan_1,training,filters = 96,kernel = 3,stride = 1)
+
+    with tf.variable_scope('Branch_2') as scope:
+      chan_2 = net
+      chan_2 = bn_conv2d(chan_2,training,filters = 64,kernel = 1,stride = 1)
+      chan_2 = bn_conv2d(chan_2,training,filters = 96,kernel = 3,stride = 1)
+
+    with tf.variable_scope('Branch_3') as scope:
+      chan_3 = net
+      chan_3 = bn_conv2d(chan_3,training,filters = 96,kernel = 1,stride = 1)
+
+    with tf.variable_scope('Branch_4') as scope:
+      chan_4 = net
+      chan_4 = tf.layers.average_pooling2d(chan_4,3,1,padding = 'same')
+      chan_4 = bn_conv2d(chan_4,training,filters = 96,kernel = 1,stride = 1)
+
+    net = [chan_1,chan_2,chan_3,chan_4]
+    net = delist(net)
+
+  return net
+
+def inception_block_b(net,training,trainable,name):
+  with tf.variable_scope(name) as scope:
+    with tf.variable_scope('Branch_1') as scope:
+      chan_1 = net
+      chan_1 = bn_conv2d(chan_1,training,filters = 192,kernel = 1    ,stride = 1)
+      chan_1 = bn_conv2d(chan_1,training,filters = 192,kernel = (1,7),stride = 1)
+      chan_1 = bn_conv2d(chan_1,training,filters = 224,kernel = (7,1),stride = 1)
+      chan_1 = bn_conv2d(chan_1,training,filters = 224,kernel = (1,7),stride = 1)
+      chan_1 = bn_conv2d(chan_1,training,filters = 256,kernel = (7,1),stride = 1)
+
+    with tf.variable_scope('Branch_2') as scope:
+      chan_2 = net
+      chan_2 = bn_conv2d(chan_2,training,filters = 192,kernel = 1    ,stride = 1)
+      chan_2 = bn_conv2d(chan_2,training,filters = 224,kernel = (1,7),stride = 1)
+      chan_2 = bn_conv2d(chan_2,training,filters = 256,kernel = (7,1),stride = 1)
+
+    with tf.variable_scope('Branch_3') as scope:
+      chan_3 = net
+      chan_3 = bn_conv2d(chan_3,training,filters = 384,kernel = 1,stride = 1)
+
+    with tf.variable_scope('Branch_4') as scope:
+      chan_4 = net
+      chan_4 = tf.layers.average_pooling2d(chan_4,3,1,padding = 'same')
+      chan_4 = bn_conv2d(chan_4,training,filters = 128,kernel = 1,stride = 1)
+
+    net = [chan_1,chan_2,chan_3,chan_4]
+    net = delist(net)
+
+  return net
+
+
+def inception_block_c(net,training,trainable,name):
+  with tf.variable_scope(name) as scope:
+    with tf.variable_scope('Branch_1') as scope:
+      chan_1   = net
+      chan_1   = bn_conv2d(chan_1,training,filters = 384,kernel = 1    ,stride = 1)
+      chan_1   = bn_conv2d(chan_1,training,filters = 448,kernel = (1,3),stride = 1)
+      chan_1   = bn_conv2d(chan_1,training,filters = 512,kernel = (3,1),stride = 1)
+      chan_1_a = bn_conv2d(chan_1,training,filters = 256,kernel = (1,3),stride = 1)
+      chan_1_b = bn_conv2d(chan_1,training,filters = 256,kernel = (3,1),stride = 1)
+      chan_1   = [chan_1_a,chan_1_b]
+      chan_1   = delist(chan_1)
+
+    with tf.variable_scope('Branch_2') as scope:
+      chan_2   = net
+      chan_2   = bn_conv2d(chan_2,training,filters = 384,kernel = 1    ,stride = 1)
+      chan_2_a = bn_conv2d(chan_2,training,filters = 256,kernel = (1,3),stride = 1)
+      chan_2_b = bn_conv2d(chan_2,training,filters = 256,kernel = (3,1),stride = 1)
+      chan_2   = [chan_2_a,chan_2_b]
+      chan_2   = delist(chan_2)
+
+    with tf.variable_scope('Branch_3') as scope:
+      chan_3 = net
+      chan_3 = bn_conv2d(chan_3,training,filters = 256,kernel = 1,stride = 1)
+
+    with tf.variable_scope('Branch_4') as scope:
+      chan_4 = net
+      chan_4 = tf.layers.average_pooling2d(chan_4,3,1,padding = 'same')
+      chan_4 = bn_conv2d(chan_4,training,filters = 256,kernel = 1,stride = 1)
+
+    net = [chan_1,chan_2,chan_3,chan_4]
+    net = delist(net)
+
+  return net

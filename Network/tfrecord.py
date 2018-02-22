@@ -14,6 +14,10 @@ def sizes():
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 
+flags.DEFINE_integer('imgH'        ,256     ,'Image Height.')
+flags.DEFINE_integer('imgW'        ,256     ,'Image Width.')
+flags.DEFINE_integer('save_stride' ,1       ,'Amount of striding to save images in Tensorboard.')
+
 # Constants used for dealing with the files, matches convert_to_records.
 TRAIN_FILE      = 'PlantVision-Train.tfrecords'
 VALIDATION_FILE = 'PlantVision-Test.tfrecords'
@@ -115,8 +119,8 @@ def read_decode(tfrecord_filenames_queue):
         })
 
     image = tf.decode_raw(features['image_raw'], tf.uint8)
-    p_label = tf.decode_raw(features['p_label_r'], tf.uint8)
-    d_label = tf.decode_raw(features['d_label_r'], tf.uint8)
+    p_label = tf.decode_raw(features['p_label_r'], tf.int32)
+    d_label = tf.decode_raw(features['d_label_r'], tf.int32)
 
     image_shape = tf.stack([imgH, imgW, 3])
 
