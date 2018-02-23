@@ -3,13 +3,12 @@ import numpy as np
 import tensorflow as tf
 import os.path
 import random
+import util
 
 # Basic model parameters as external flags.
-imgW = int(256)
-imgH = int(256)
 
 def sizes():
-  return imgW,imgH
+  return FLAGS.imgW,FLAGS.imgH
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
@@ -25,7 +24,6 @@ VALIDATION_FILE = 'PlantVision-Test.tfrecords'
 # Helper functions for defining tf types
 def _bytes_feature(value):
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
-
 
 def _int64_feature(value):
     return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
@@ -55,12 +53,12 @@ def write_image_label_pairs_to_tfrecord(filename_pairs, tfrecords_filename):
     for img_path, p_label, d_label in filename_pairs:
 
         img = Image.open(img_path)
-        img = img.resize((imgW,imgH),Image.NEAREST)
+        img = img.resize((FLAGS.imgW,FLAGS.imgH),Image.NEAREST)
         img = np.asarray(img)
 
         img       =                img.astype(np.uint8)
-        p_label   =  np.array(p_label).astype(np.uint8)
-        d_label   =  np.array(d_label).astype(np.uint8)
+        p_label   =  np.asarray(p_label).astype(np.uint8)
+        d_label   =  np.asarray(d_label).astype(np.uint8)
 
         img_raw   =     img.tobytes()
         p_label_r = p_label.tobytes()
@@ -118,18 +116,19 @@ def read_decode(tfrecord_filenames_queue):
         'd_label_r': tf.FixedLenFeature([], tf.string)
         })
 
-    image = tf.decode_raw(features['image_raw'], tf.uint8)
-    p_label = tf.decode_raw(features['p_label_r'], tf.int32)
-    d_label = tf.decode_raw(features['d_label_r'], tf.int32)
+    image   = tf.decode_raw(features['image_raw'], tf.uint8)
+    p_label = tf.decode_raw(features['p_label_r'], tf.uint8)
+    d_label = tf.decode_raw(features['d_label_r'], tf.uint8)
 
-    image_shape = tf.stack([imgH, imgW, 3])
+    image_shape = tf.stack([FLAGS.imgH, FLAGS.imgW, 3])
+    # input(FLAGS.imgH * FLAGS.imgW * 3)
 
     image = tf.reshape(image, image_shape)
     image = tf.cast(image,tf.float32)
     image = tf.divide(image,255)
 
-    p_label = tf.reshape(p_label,[1])
-    d_label = tf.reshape(d_label,[1])
+    p_label = tf.cast(tf.reshape(p_label,[1]),tf.float32)
+    d_label = tf.cast(tf.reshape(d_label,[1]),tf.float32)
 
     return image, p_label, d_label
 
@@ -153,6 +152,7 @@ def inputs(global_step,train,batch_size,num_epochs):
   num_epochs = FLAGS.num_epochs if train else 1
   print('Input file: ' + filename)
   with tf.name_scope('input'):
+    # util.tfrecord_advanced_inspect(filename)
     filename_queue = tf.train.string_input_producer([filename], num_epochs=num_epochs)
 
     image, p_label, d_label = read_decode(filename_queue)

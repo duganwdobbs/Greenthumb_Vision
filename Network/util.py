@@ -31,6 +31,33 @@ def tfrecord_inspect(file):
   print("%d records in %s"%(c,file))
   input("PRESS ENTER TO CONTINUE...")
 
+def tfrecord_advanced_inspect(file):
+  record_iterator = tf.python_io.tf_record_iterator(path=file)
+
+  for string_record in record_iterator:
+    # Parse the next example
+    example = tf.train.Example()
+    example.ParseFromString(string_record)
+
+    # Get the features you stored (change to match your tfrecord writing code)
+    img_string = (example.features.feature['image_raw']
+                                  .bytes_list
+                                  .value[0])
+    plant =      (example.features.feature['p_label_r']
+                                  .bytes_list
+                                  .value[0])
+    disease =    (example.features.feature['d_label_r']
+                                  .bytes_list
+                                  .value[0])
+    # Convert to a numpy array (change dtype to the datatype you stored)
+    img_1d = np.fromstring(img_string, dtype=np.uint8)
+    plant = np.fromstring(plant, dtype=np.uint8)
+    disease = np.fromstring(disease, dtype=np.uint8)
+    # Print the image shape; does it match your expectations?
+    print(img_1d.shape)
+    print(plant.shape)
+    print(disease.shape)
+
 def Image_To_Patch(image):
   with tf.variable_scope("Image_To_Patch") as scope:
     imgW,imgH,patW,patH,numP = get_Im_Specs()

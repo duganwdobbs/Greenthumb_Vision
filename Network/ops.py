@@ -43,7 +43,7 @@ def bn_conv2d(net, training, filters, kernel = 3, stride = 1, dilation_rate = 1,
 
 def batch_norm(net,training,trainable,activation = relu):
   with tf.variable_scope('Batch_Norm_%d'%(FLAGS.bn_scope)):
-    FLAGS.bn_scope+=1
+    FLAGS.bn_scope = FLAGS.bn_scope + 1
     net = tf.layers.batch_normalization(delist(net),training = training, trainable = trainable)
     if activation is not None:
       net = activation(net)
@@ -326,26 +326,26 @@ def inception_block_b(net,training,trainable,name):
   with tf.variable_scope(name) as scope:
     with tf.variable_scope('Branch_1') as scope:
       chan_1 = net
-      chan_1 = bn_conv2d(chan_1,training,filters = 192,kernel = 1    ,stride = 1)
-      chan_1 = bn_conv2d(chan_1,training,filters = 192,kernel = (1,7),stride = 1)
-      chan_1 = bn_conv2d(chan_1,training,filters = 224,kernel = (7,1),stride = 1)
-      chan_1 = bn_conv2d(chan_1,training,filters = 224,kernel = (1,7),stride = 1)
-      chan_1 = bn_conv2d(chan_1,training,filters = 256,kernel = (7,1),stride = 1)
+      chan_1 = bn_conv2d(chan_1,training,filters = 86,kernel = 1    ,stride = 1)
+      chan_1 = bn_conv2d(chan_1,training,filters = 86,kernel = (1,7),stride = 1)
+      chan_1 = bn_conv2d(chan_1,training,filters = 112,kernel = (7,1),stride = 1)
+      chan_1 = bn_conv2d(chan_1,training,filters = 112,kernel = (1,7),stride = 1)
+      chan_1 = bn_conv2d(chan_1,training,filters = 128,kernel = (7,1),stride = 1)
 
     with tf.variable_scope('Branch_2') as scope:
       chan_2 = net
-      chan_2 = bn_conv2d(chan_2,training,filters = 192,kernel = 1    ,stride = 1)
-      chan_2 = bn_conv2d(chan_2,training,filters = 224,kernel = (1,7),stride = 1)
-      chan_2 = bn_conv2d(chan_2,training,filters = 256,kernel = (7,1),stride = 1)
+      chan_2 = bn_conv2d(chan_2,training,filters = 96,kernel = 1    ,stride = 1)
+      chan_2 = bn_conv2d(chan_2,training,filters = 112,kernel = (1,7),stride = 1)
+      chan_2 = bn_conv2d(chan_2,training,filters = 128,kernel = (7,1),stride = 1)
 
     with tf.variable_scope('Branch_3') as scope:
       chan_3 = net
-      chan_3 = bn_conv2d(chan_3,training,filters = 384,kernel = 1,stride = 1)
+      chan_3 = bn_conv2d(chan_3,training,filters = 192,kernel = 1,stride = 1)
 
     with tf.variable_scope('Branch_4') as scope:
       chan_4 = net
       chan_4 = tf.layers.average_pooling2d(chan_4,3,1,padding = 'same')
-      chan_4 = bn_conv2d(chan_4,training,filters = 128,kernel = 1,stride = 1)
+      chan_4 = bn_conv2d(chan_4,training,filters = 64,kernel = 1,stride = 1)
 
     net = [chan_1,chan_2,chan_3,chan_4]
     net = delist(net)

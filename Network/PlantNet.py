@@ -31,20 +31,19 @@ flags.DEFINE_boolean('l2_loss'            ,False ,'If we use l2 regularization')
 flags.DEFINE_boolean('batch_norm'         ,True  ,'If we use batch normalization')
 flags.DEFINE_boolean('lr_decay'           ,True  ,'If we use Learning Rate Decay')
 flags.DEFINE_boolean('advanced_logging'   ,False ,'If we log metadata and histograms')
+
+
 flags.DEFINE_integer('num_epochs'         ,None  ,'Number of epochs to run trainer.')
-flags.DEFINE_integer('batch_size'         ,1     ,'Batch size for training.')
+flags.DEFINE_integer('batch_size'         ,2     ,'Batch size for training.')
 flags.DEFINE_integer('train_steps'        ,10000 ,'Number of steps for training on counting')
 flags.DEFINE_integer('num_plant_classes'  ,10    ,'# Classes')
 flags.DEFINE_integer('num_disease_classes',10    ,'# Classes')
-flags.DEFINE_string ('run_dir'    , FLAGS.base_dir + '/network_log/','Location to store the Tensorboard Output')
-flags.DEFINE_string ('train_dir'  ,FLAGS.base_dir  + '/'            ,'Location of the tfrecord files.')
-flags.DEFINE_string ('ckpt_name'  ,'cows.ckt'                       ,'Checkpoint name')
-flags.DEFINE_string ('ckpt_i_name','cows-interrupt.ckpt'            ,'Checkpoint Interrupt name')
-flags.DEFINE_string ('net_name','PlantVision'                       ,'Network name')
 
-def launchTensorBoard(directory):
-  sleep(30)
-  os.system(directory)
+
+flags.DEFINE_string ('run_dir'    , FLAGS.base_dir + 'network_log/','Location to store the Tensorboard Output')
+flags.DEFINE_string ('train_dir'  ,FLAGS.base_dir                  ,'Location of the tfrecord files.')
+flags.DEFINE_string ('ckpt_name'  ,'greenthumb.ckpt'               ,'Checkpoint name')
+flags.DEFINE_string ('net_name'   ,'PlantVision'                   ,'Network name')
 
 def trainer(global_step,loss,train_vars,learning_rate = .001):
   update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -55,7 +54,7 @@ def trainer(global_step,loss,train_vars,learning_rate = .001):
                                                    250, 0.85, staircase=True)
         tf.summary.scalar("Learning_Rate",learning_rate)
 
-      optomizer = tf.train.RMSPropOptimizer(learning_rate,momentum = .8, epsilon = 1e-5)
+      optomizer = tf.train.AdamOptimizer(learning_rate,epsilon = 1e-5)
       train     = optomizer.minimize(loss,var_list = train_vars)
 
       return train
@@ -80,6 +79,12 @@ def inference(global_step,images,p_lab,d_lab,training,name,trainable = True):
       net = ops.dense_reduction(net,training,filters = 8, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
                                 name = 'Dense_Block_2')
+      net = ops.dense_reduction(net,training,filters = 4, kernel = 3, stride = 2,
+                                activation=tf.nn.leaky_relu,trainable=trainable,
+                                name = 'Dense_Block_3')
+      net = ops.dense_reduction(net,training,filters = 8, kernel = 3, stride = 2,
+                                activation=tf.nn.leaky_relu,trainable=trainable,
+                                name = 'Dense_Block_4')
 
       # Run the network over some resnet modules, including reduction
       #   modules in order to further reduce the parameters and have a powerful,
@@ -87,22 +92,20 @@ def inference(global_step,images,p_lab,d_lab,training,name,trainable = True):
       net = ops.inception_block_a(net,training,trainable,name='inception_block_a_1')
       net = ops.dense_reduction(net,training,filters =16, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
-                                name = 'Dense_Block_3')
+                                name = 'Dense_Block_5')
 
       net = ops.inception_block_a(net,training,trainable,name='inception_block_a_2')
       net = ops.inception_block_a(net,training,trainable,name='inception_block_a_3')
       net = ops.dense_reduction(net,training,filters =24, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
-                                name = 'Dense_Block_5')
+                                name = 'Dense_Block_6')
 
       net = ops.inception_block_b(net,training,trainable,name='inception_block_b_1')
       net = ops.inception_block_b(net,training,trainable,name='inception_block_b_2')
-      net = ops.dense_reduction(net,training,filters =28, kernel = 3, stride = 2,
-                                activation=tf.nn.leaky_relu,trainable=trainable,
-                                name = 'Dense_Block_6')
 
-      net = ops.inception_block_c(net,training,trainable,name='inception_block_c_1')
-      net = ops.inception_block_c(net,training,trainable,name='inception_block_c_1')
+      # Commenting out for proof of concept
+      # net = ops.inception_block_c(net,training,trainable,name='inception_block_c_1')
+      # net = ops.inception_block_c(net,training,trainable,name='inception_block_c_1')
 
       # We're leaving the frequency domain in order to preform fully connected
       #    inferences. Fully connected inferences do not work with imaginary
@@ -132,7 +135,7 @@ def inference(global_step,images,p_lab,d_lab,training,name,trainable = True):
       for x in range(FLAGS.num_plant_classes):
         chan = tf.layers.dense(net,FLAGS.num_disease_classes,name = 'Disease_%d'%x)
         d_net.append(chan)
-      d_net = ops.delist(d_net)
+      d_net = tf.stack(d_net)
 
       # If we're training, we want to not use the plant network output, rather the
       #    plant label. This ensures that the disease layers train properly.
@@ -140,12 +143,17 @@ def inference(global_step,images,p_lab,d_lab,training,name,trainable = True):
       #          IE: The disease gradient does not flow through the whole network,
       #              using the plant network as its preprocessing.
       index = d_lab if training else tf.argmax(p_log)
-      index = tf.reshape(index,[])
-      index = tf.convert_to_tensor([index,0])
-      size  = tf.convert_to_tensor([1,FLAGS.num_disease_classes])
+      index = tf.cast(index,tf.int32)
 
-      # Extract the disease logit
-      d_log = tf.slice(d_net,index,size)
+      size = [1,1,FLAGS.num_disease_classes]
+      # Extract the disease logit per example in batch
+      d_log = []
+      for x in range(FLAGS.batch_size):
+        start = [index[x],x,0]
+        val = tf.slice(d_net,start,size)
+        d_log.append(val)
+      d_log = tf.stack(d_log)
+      d_log = tf.reshape(d_log,[FLAGS.batch_size,FLAGS.num_disease_classes])
 
     # Get the losses and metrics
 
@@ -224,7 +232,8 @@ def train(train_run = True, restore = False):
       writer         = tf.summary.FileWriter(filestr,sess.graph)
 
       # Setting up the checkpoint saver and training coordinator for the network
-      saver          = tf.train.Saver(tf.trainable_variables + b_norm_vars)
+      saver_vars = [var for var in tf.trainable_variables() if var not in b_norm_vars] + b_norm_vars
+      saver          = tf.train.Saver()
       if(restore or not train_run):
         # inspect(tf.train.latest_checkpoint(FLAGS.run_dir))
         saver.restore(sess,tf.train.latest_checkpoint(FLAGS.run_dir))
@@ -281,12 +290,8 @@ def train(train_run = True, restore = False):
       sess.close()
 
 def main(_):
-  # TensorBoard = Process(target = launchTensorBoard, args = ('tensorboard --logdir=' + FLAGS.run_dir + "tensorlogs/",))
-  #TensorBoard.start()
-  train(restore = False)
+  train(train_run = True,  restore = False)
   train(train_run = False, restore = False)
-  #TensorBoard.terminate()
-  #TensorBoard.join()
 
 if __name__ == '__main__':
   tf.app.run()
