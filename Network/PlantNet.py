@@ -247,7 +247,7 @@ def train(train_run = True, restore = False):
       threads        = tf.train.start_queue_runners(sess = sess, coord = coord)
 
       try:
-        ops = [train,summaries,metrics] if train_run else [train,summaries,metrics,save_imgs,p_lab,p_log,d_lab,d_log]
+        ops = [train,summaries,metrics,p_lab,p_log,d_lab,d_log] if train_run else [train,summaries,metrics,save_imgs,p_lab,p_log,d_lab,d_log]
 
         step = tf.train.global_step(sess,global_step)
         while not coord.should_stop() and step <= FLAGS.train_steps:
@@ -255,9 +255,12 @@ def train(train_run = True, restore = False):
 
           # Run the network and write summaries
           if train_run:
-            _,_summ_result,_metrics       = sess.run(ops, options = run_options, run_metadata = run_metadata)
+            _,_summ_result,_metrics,_p_lab,_p_log,_d_lab,_d_log       = sess.run(ops, options = run_options, run_metadata = run_metadata)
           else:
             _,_summ_result,_metrics,_imgs,_p_lab,_p_log,_d_lab,_d_log = sess.run(ops, options = run_options, run_metadata = run_metadata)
+
+          # Some basic label / logit output
+          print("Label / Prediciton Plant: %d / %d Disease: %d / %d"%(_p_lab,_p_log,_d_lab,_d_log))
 
           # Write summaries
           if FLAGS.advanced_logging:
