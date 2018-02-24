@@ -24,6 +24,7 @@ FLAGS = flags.FLAGS
 
 if   platform.system() == 'Windows':
   flags.DEFINE_string ('base_dir'  ,'E:/Greenthumb_Vision'          ,'Base os specific DIR')
+  flags.DEFINE_string ('log_dir'   ,'F:/Greenthumb_Vision'          ,'Base os specific DIR')
 elif platform.system() == 'Linux':
   flags.DEFINE_string ('base_dir'  ,'/home/ddobbs/Greenthumb_Vision/','Base os specific DIR')
 
@@ -31,6 +32,7 @@ flags.DEFINE_boolean('l2_loss'            ,True  ,'If we use l2 regularization')
 flags.DEFINE_boolean('batch_norm'         ,True  ,'If we use batch normalization')
 flags.DEFINE_boolean('lr_decay'           ,True  ,'If we use Learning Rate Decay')
 flags.DEFINE_boolean('advanced_logging'   ,False ,'If we log metadata and histograms')
+flags.DEFINE_boolean('log_imgs'           ,False ,'If we log images to tfrecord')
 
 
 flags.DEFINE_integer('num_epochs'         ,1     ,'Number of epochs to run trainer.')
@@ -40,7 +42,7 @@ flags.DEFINE_integer('num_plant_classes'  ,10    ,'# Classes')
 flags.DEFINE_integer('num_disease_classes',10    ,'# Classes')
 
 
-flags.DEFINE_string ('run_dir'    , FLAGS.base_dir + '/network_log/','Location to store the Tensorboard Output')
+flags.DEFINE_string ('run_dir'    , FLAGS.log_dir + '/network_log/','Location to store the Tensorboard Output')
 flags.DEFINE_string ('train_dir'  , FLAGS.base_dir                 ,'Location of the tfrecord files.')
 flags.DEFINE_string ('ckpt_name'  ,'greenthumb.ckpt'               ,'Checkpoint name')
 flags.DEFINE_string ('net_name'   ,'PlantVision'                   ,'Network name')
@@ -158,17 +160,17 @@ def inference(global_step,images,p_lab,d_lab,training,name,trainable = True):
     # Get the losses and metrics
 
   with tf.variable_scope('Metrics') as scope:
-    p_loss = ops.xentropy_loss(labels = p_lab,logits = p_log,name = "Plant_Metrics")
-    d_loss = ops.xentropy_loss(labels = d_lab,logits = d_log,name = "Disease_Metrics")
+    p_vars = [var for var in tf.trainable_variables() if 'Process_Network' in var.name or 'Plant_Neurons' in var.name]
+    d_vars = [var for var in tf.trainable_variables() if 'Disease_Neurons' in var.name]
+
+    p_loss = ops.xentropy_loss(p_lab,p_log,p_vars,name = "Plant_Loss")
+    d_loss = ops.xentropy_loss(d_lab,d_log,d_vars,name = "Disease_Loss")
     p_log = tf.argmax(p_log,-1)
     d_log = tf.argmax(d_log,-1)
     p_acc  = ops.accuracy(p_lab,p_log,name = 'Plant_Accuracy')
     d_acc  = ops.accuracy(d_lab,d_log,name = 'Disease_Accuracy')
 
     metrics = (p_loss,d_loss,p_acc,d_acc)
-
-    p_vars = [var for var in tf.trainable_variables() if 'Process_Network' in var.name or 'Plant_Neurons' in var.name]
-    d_vars = [var for var in tf.trainable_variables() if 'Disease_Neurons' in var.name]
 
   with tf.variable_scope('Trainer') as scope:
     train = tf.assign_add(global_step,1,name = 'Global_Step')
@@ -183,6 +185,7 @@ def inference(global_step,images,p_lab,d_lab,training,name,trainable = True):
 def train(train_run = True, restore = False):
   with tf.Graph().as_default():
       config         = tf.ConfigProto(allow_soft_placement = True)
+      config.gpu_options.allow_growth = True
       sess           = tf.Session(config = config)
       # Setting up a new session
       global_step    = tf.Variable(1,name='global_step',trainable=False)
@@ -264,8 +267,8 @@ def train(train_run = True, restore = False):
             _,_summ_result,_metrics,_imgs,_p_lab,_p_log,_d_lab,_d_log = sess.run(ops, options = run_options, run_metadata = run_metadata)
 
           # Some basic label / logit output
-          for d in range(FLAGS.batch_size):
-            print("Label / Prediciton Plant: %d / %d Disease: %d / %d"%(_p_lab[d],_p_log[d],_d_lab[d],_d_log[d]))
+          # for d in range(FLAGS.batch_size):
+            # print("Label / Prediciton Plant: %d / %d Disease: %d / %d"%(_p_lab[d],_p_log[d],_d_lab[d],_d_log[d]))
 
           # Write summaries
           if FLAGS.advanced_logging:
@@ -273,7 +276,7 @@ def train(train_run = True, restore = False):
           writer.add_summary(_summ_result,step)
 
           #Write the cmat to a file at each step, write images if testing.
-          if not train_run:
+          if not train_run and step % 1000 == 0:
             for x in range(len(_imgs)):
               for d in range(FLAGS.batch_size):
                 with open(filestr + '%d_%d_plant_%d_%d_disease_%d_%d'%(step,d,_p_lab[d],_p_log[d],_d_lab[d],_d_log[d]) + '_img.png','wb+') as f:
@@ -287,7 +290,9 @@ def train(train_run = True, restore = False):
         if train_run:
           saver.save(sess,savestr,global_step = step)
           saver.save(sess,logstr,global_step = step)
-      # except tf.errors.OutOfRangeError:
+      except tf.errors.OutOfRangeError:
+        saver.save(sess,savestr,global_step = step)
+        saver.save(sess,logstr,global_step = step)
         print("Sumthin messed up man.")
       finally:
         if train_run:
@@ -301,6 +306,7 @@ def main(_):
   for x in range(10):
     train(train_run = True,  restore = x!=0 )
     train(train_run = False, restore = False)
+    print("Epoch %d training+validation complete"%x+1)
 
 if __name__ == '__main__':
   tf.app.run()

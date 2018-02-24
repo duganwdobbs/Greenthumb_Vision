@@ -149,12 +149,13 @@ def cmat(labels_flat,logits_flat):
       cmat_sum = tf.add(cmat,cmat_sum)
     return cmat_sum
 
-def l2loss(loss):
+def l2loss(loss,loss_vars = None):
   if FLAGS.l2_loss:
     with tf.variable_scope("L2_Loss") as scope:
-      l2 = tf.add_n([tf.nn.l2_loss(var) for var in tf.trainable_variables() if 'bias' not in var.name])
+      loss_vars = tf.trainable_variables() if loss_vars is None else loss_vars
+      l2 = tf.add_n([tf.nn.l2_loss(var) for var in loss_vars if 'bias' not in var.name])
       l2 = tf.scalar_mul(.0002,l2)
-      tf.summary.scalar('L2_Loss',loss)
+      tf.summary.scalar('L2_Loss',l2)
       loss = tf.add(loss,l2)
       tf.summary.scalar('Total_Loss',loss)
   return loss
@@ -178,7 +179,7 @@ def log_loss(labels,logits):
     return loss
 
 # Loss function for tape, using cross entropy
-def xentropy_loss(labels,logits,name = 'Xent_Loss'):
+def xentropy_loss(labels,logits,loss_vars = None,name = 'Xent_Loss'):
   with tf.variable_scope(name) as scope:
     labels = tf.cast(labels,tf.int32)
 
@@ -186,7 +187,7 @@ def xentropy_loss(labels,logits,name = 'Xent_Loss'):
     loss = tf.reduce_mean(loss)
 
     tf.summary.scalar('XEnt_Loss',loss)
-    loss = l2loss(loss)
+    loss = l2loss(loss,loss_vars)
     return loss
 
 # Absolute accuracy calculation for counting

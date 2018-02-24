@@ -148,7 +148,8 @@ def imsave(im_bat, name = 'Image_Save',int_scale = True, stride = True):
       save_ims.append(save_img)
     if stride:
       im_bat = im_bat[:,::FLAGS.save_stride,::FLAGS.save_stride,:]
-    tf.summary.image(name,im_bat)
+    if FLAGS.log_imgs:
+      tf.summary.image(name,im_bat)
     save_ims_grouped  = tf.tuple(save_ims)
     return save_ims_grouped
 
