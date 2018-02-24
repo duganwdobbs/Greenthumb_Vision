@@ -98,3 +98,11 @@ ENV/
 # mypy
 .mypy_cache/
 *.tfrecords
+*.data-00000-of-00001
+*.meta
+*.index
+*.png
+*.HAL1000
+network_log/tensorlogs/23_Feb_2018_19_55_TEST/checkpoint
+network_log/tensorlogs/23_Feb_2018_11_43_TRAIN/checkpoint
+network_log/tensorlogs/23_Feb_2018_19_33_TRAIN/checkpoint
