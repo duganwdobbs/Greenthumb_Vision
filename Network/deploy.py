@@ -19,7 +19,7 @@ elif platform.system() == 'Linux':
   flags.DEFINE_string ('base_dir'  ,'/home/ddobbs/Greenthumb_Vision/','Base os specific DIR')
   flags.DEFINE_string ('log_dir'   ,'/home/ddobbs/Greenthumb_Vision/','Base os specific DIR')
 
-flags.DEFINE_integer('batch_size'         ,4     ,'Batch size for training.')
+flags.DEFINE_integer('batch_size'         ,1     ,'Batch size for training.')
 flags.DEFINE_integer('num_plant_classes'  ,10    ,'# Classes')
 flags.DEFINE_integer('num_disease_classes',10    ,'# Classes')
 
@@ -56,6 +56,8 @@ class Deploy_Network:
       saver.restore(sess,tf.train.latest_checkpoint(FLAGS.run_dir))
 
   # Receives an image
+  # Returns output of statistical probability matrix where the max index is
+  #   the label.
   def run(self,feed_image):
     outputs = [self.p_log,self.d_log]
     _p_log,_d_log = self.sess.run(outputs,{self.images: feed_image})
