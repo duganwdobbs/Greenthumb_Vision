@@ -1,106 +1,62 @@
+import tensorflow as tf
+import PlantNet   as pn
 
-def inputs():
-  images = tf.placeholder(tf.float32,(256,256))
-  return images
+import ops
+import util
 
-def inference(images,name):
-  training = False
-  ops.init_scope_vars()
-  with tf.variable_scope(name) as scope:
-    # Preform some image preprocessing
-    net = images
-    net = ops.delist(net)
-    net = tf.cast(net,tf.float32)
-    net = ops.batch_norm(net,training,trainable)
-    # net = tf.fft2d(net)
-    # If we receive image channels in a format that shouldn't be normalized,
-    #   that goes here.
-    with tf.variable_scope('Process_Network'):
-      # Run two dense reduction modules to reduce the number of parameters in
-      #   the network and for low parameter feature extraction.
-      net = ops.dense_reduction(net,training,filters = 4, kernel = 3, stride = 2,
-                                activation=tf.nn.leaky_relu,trainable=trainable,
-                                name = 'Dense_Block_1')
-      net = ops.dense_reduction(net,training,filters = 8, kernel = 3, stride = 2,
-                                activation=tf.nn.leaky_relu,trainable=trainable,
-                                name = 'Dense_Block_2')
-      net = ops.dense_reduction(net,training,filters = 4, kernel = 3, stride = 2,
-                                activation=tf.nn.leaky_relu,trainable=trainable,
-                                name = 'Dense_Block_3')
-      net = ops.dense_reduction(net,training,filters = 8, kernel = 3, stride = 2,
-                                activation=tf.nn.leaky_relu,trainable=trainable,
-                                name = 'Dense_Block_4')
+# Limiting the amount of logging that gets spewed to the console
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-      # Run the network over some resnet modules, including reduction
-      #   modules in order to further reduce the parameters and have a powerful,
-      #   proven network architecture.
-      net = ops.inception_block_a(net,training,trainable,name='inception_block_a_1')
-      net = ops.dense_reduction(net,training,filters =16, kernel = 3, stride = 2,
-                                activation=tf.nn.leaky_relu,trainable=trainable,
-                                name = 'Dense_Block_5')
+# Setting up parser flags
+flags = tf.app.flags
+FLAGS = flags.FLAGS
 
-      net = ops.inception_block_a(net,training,trainable,name='inception_block_a_2')
-      net = ops.inception_block_a(net,training,trainable,name='inception_block_a_3')
-      net = ops.dense_reduction(net,training,filters =24, kernel = 3, stride = 2,
-                                activation=tf.nn.leaky_relu,trainable=trainable,
-                                name = 'Dense_Block_6')
+# Defining parser flags (Fancy global variables)
+if   platform.system() == 'Windows':
+  flags.DEFINE_string ('base_dir'  ,'E:/Greenthumb_Vision'           ,'Base os specific DIR')
+  flags.DEFINE_string ('log_dir'   ,'F:/Greenthumb_Vision'           ,'Base os specific DIR')
+elif platform.system() == 'Linux':
+  flags.DEFINE_string ('base_dir'  ,'/home/ddobbs/Greenthumb_Vision/','Base os specific DIR')
+  flags.DEFINE_string ('log_dir'   ,'/home/ddobbs/Greenthumb_Vision/','Base os specific DIR')
 
-      net = ops.inception_block_b(net,training,trainable,name='inception_block_b_1')
-      net = ops.inception_block_b(net,training,trainable,name='inception_block_b_2')
+flags.DEFINE_integer('batch_size'         ,4     ,'Batch size for training.')
+flags.DEFINE_integer('num_plant_classes'  ,10    ,'# Classes')
+flags.DEFINE_integer('num_disease_classes',10    ,'# Classes')
 
-      # Commenting out for proof of concept
-      # net = ops.inception_block_c(net,training,trainable,name='inception_block_c_1')
-      # net = ops.inception_block_c(net,training,trainable,name='inception_block_c_1')
+flags.DEFINE_boolean('batch_norm'         ,True  ,'If we use batch normalization')
 
-      # We're leaving the frequency domain in order to preform fully connected
-      #    inferences. Fully connected inferences do not work with imaginary
-      #    numbers. The error would always have an i/j term that will not be able
-      #    to generate a correct gradient for.
-      # net = tf.ifft2d(net)
+flags.DEFINE_string ('run_dir'    , FLAGS.log_dir + '/network_log/','Location to store the Tensorboard Output')
 
-        # Theoretically, the network will be 8x8x128, for 8192 neurons in the first
-        #    fully connected network.
-      net = util.squish_to_batch(net)
-      _b,neurons = net.get_shape().as_list()
+class Deploy_Network:
 
-    with tf.variable_scope('Plant_Neurons') as scope:
-      # Fully connected network with number of neurons equal to the number of
-      #    parameters in the network at this point
-      net = tf.layers.dense(net,neurons)
+  def init(self):
+    with tf.Graph().as_default():
+      # Allowing the network to use a non-default GPU if necessary.
+      config                          = tf.ConfigProto(allow_soft_placement = True)
 
-      # Fully connected layer to extract the plant classification
-      #    NOTE: This plant classification will be used to extract the proper
-      #          disease classification matrix
-      p_log      = tf.layers.dense(net,FLAGS.num_plant_classes)
+      # Making it so that TensorFlow doesn't eat all of the video ram.
+      config.gpu_options.allow_growth = True
 
-    with tf.variable_scope('Disease_Neurons') as scope:
-      # Construct a number of final layers for diseases equal to the number of
-      # plants.
-      d_net = []
-      for x in range(FLAGS.num_plant_classes):
-        chan = tf.layers.dense(net,FLAGS.num_disease_classes,name = 'Disease_%d'%x)
-        d_net.append(chan)
-      d_net = tf.stack(d_net)
+      # Setting up our session, saved as a class var so that we can use it later
+      self.sess                       = tf.Session(config = config)
 
-      # If we're training, we want to not use the plant network output, rather the
-      #    plant label. This ensures that the disease layers train properly.
-      #    NOTE: The disease loss function only trains based on this final layer.
-      #          IE: The disease gradient does not flow through the whole network,
-      #              using the plant network as its preprocessing.
-      index = d_lab #if training else tf.argmax(p_log)
-      index = tf.cast(index,tf.int32)
+      # Defining our image dimensions, we will use this placeholder to send
+      #   data through the network
+      self.images                     = tf.placeholder(tf.float32,(256,256))
 
-      size = [1,1,FLAGS.num_disease_classes]
-      # Extract the disease logit per example in batch
-      d_log = []
-      for x in range(FLAGS.batch_size):
-        start = [index[x],x,0]
-        val = tf.slice(d_net,start,size)
-        d_log.append(val)
-      d_log = tf.stack(d_log)
-      d_log = tf.reshape(d_log,[FLAGS.batch_size,FLAGS.num_disease_classes])
+      # Getting the outputs from the network. These will be matrices in the
+      #  shape of:
+      #    p_log: [# Plant Classes #]
+      #    d_log: [# Plant Classes #][#Disease Classes#]
+      self.p_log, self.d_log          = pn.inference(images,training = False,name = 'PlantVision',trainable = False)
 
-  return p_log,d_log
+      # Setting up system to load a saved model
+      saver = tf.train.Saver(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES))
+      # Loading the saved model
+      saver.restore(sess,tf.train.latest_checkpoint(FLAGS.run_dir))
 
-# Receives an image
-def deploy()
+  # Receives an image
+  def run(self,feed_image):
+    outputs = [self.p_log,self.d_log]
+    _p_log,_d_log = self.sess.run(outputs,{self.images: feed_image})
+    return _p_log, _d_log

@@ -62,7 +62,7 @@ def trainer(global_step,loss,train_vars,learning_rate = .001):
       return train
 
 # The segmentation network.
-def inference(global_step,images,p_lab,d_lab,training,name,trainable = True):
+def inference(images,training,name,trainable = True):
   ops.init_scope_vars()
   with tf.variable_scope(name) as scope:
     # Preform some image preprocessing
@@ -139,26 +139,31 @@ def inference(global_step,images,p_lab,d_lab,training,name,trainable = True):
         chan = tf.layers.dense(net,FLAGS.num_disease_classes,name = 'Disease_%d'%x)
         d_net.append(chan)
       d_net = tf.stack(d_net)
+      d_log = d_net
 
-      # If we're training, we want to not use the plant network output, rather the
-      #    plant label. This ensures that the disease layers train properly.
-      #    NOTE: The disease loss function only trains based on this final layer.
-      #          IE: The disease gradient does not flow through the whole network,
-      #              using the plant network as its preprocessing.
-      index = d_lab #if training else tf.argmax(p_log)
-      index = tf.cast(index,tf.int32)
+    return p_log,d_log
 
-      size = [1,1,FLAGS.num_disease_classes]
-      # Extract the disease logit per example in batch
-      d_log = []
-      for x in range(FLAGS.batch_size):
-        start = [index[x],x,0]
-        val = tf.slice(d_net,start,size)
-        d_log.append(val)
-      d_log = tf.stack(d_log)
-      d_log = tf.reshape(d_log,[FLAGS.batch_size,FLAGS.num_disease_classes])
+def metrics(global_step,p_lab,d_lab,training):
+  with tf.variable_scope('Formatting') as scope:
+    # If we're training, we want to not use the plant network output, rather the
+    #    plant label. This ensures that the disease layers train properly.
+    #    NOTE: The disease loss function only trains based on this final layer.
+    #          IE: The disease gradient does not flow through the whole network,
+    #              using the plant network as its preprocessing.
+    index = d_lab #if training else tf.argmax(p_log)
+    index = tf.cast(index,tf.int32)
 
-    # Get the losses and metrics
+    size = [1,1,FLAGS.num_disease_classes]
+    # Extract the disease logit per example in batch
+    d_log = []
+    for x in range(FLAGS.batch_size):
+      start = [index[x],x,0]
+      val = tf.slice(d_net,start,size)
+      d_log.append(val)
+    d_log = tf.stack(d_log)
+    d_log = tf.reshape(d_log,[FLAGS.batch_size,FLAGS.num_disease_classes])
+
+  # Get the losses and metrics
 
   with tf.variable_scope('Metrics') as scope:
     p_vars = [var for var in tf.trainable_variables() if 'Process_Network' in var.name or 'Plant_Neurons' in var.name]
@@ -180,7 +185,7 @@ def inference(global_step,images,p_lab,d_lab,training,name,trainable = True):
       d_train = trainer(global_step,d_loss,d_vars)
       train   = (train,p_train,d_train)
 
-  return p_log,d_log,train,metrics
+  return d_log,train,metrics
 
 # Runs the tape training.
 def train(train_run = True, restore = False):
@@ -201,7 +206,9 @@ def train(train_run = True, restore = False):
         p_lab = tf.reshape(p_lab,[FLAGS.batch_size])
         d_lab = tf.reshape(d_lab,[FLAGS.batch_size])
 
-      p_log,d_log,train,metrics = inference(global_step,images,p_lab,d_lab,training = train_run,name = FLAGS.net_name,trainable = True)
+      p_log,d_log         = inference(images,training = train_run,name = FLAGS.net_name,trainable = True)
+      # d_log at this point is full [10][batch][10], metrics formats it correctly.
+      d_log,train,metrics = metrics(global_step,p_lab,d_log,d_lab,training = train_run)
 
       b_norm_vars = [var for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES) if 'batch_norm' in var.name]
 
