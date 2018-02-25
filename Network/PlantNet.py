@@ -4,18 +4,11 @@ import platform
 import ops
 import util
 
-import spec_ops      as stf
-
-import numpy         as     np
 import tensorflow    as     tf
 import spec_ops      as     stf
 
 from multiprocessing import Process
-from inspector       import inspect
 from tfrecord        import inputs
-from tfrecord        import sizes
-
-imgW,imgH = sizes()
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
