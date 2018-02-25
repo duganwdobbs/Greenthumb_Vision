@@ -54,7 +54,7 @@ def trainer(global_step,loss,train_vars,learning_rate = .001):
 
       return train
 
-# The segmentation network.
+# The Classification network.
 def inference(images,training,name,trainable = True):
   ops.init_scope_vars()
   with tf.variable_scope(name) as scope:
@@ -159,18 +159,27 @@ def metrics(global_step,p_lab,d_lab,training):
   # Get the losses and metrics
 
   with tf.variable_scope('Metrics') as scope:
+    # Seperate the variables out of each network, so that we do not train the
+    # process network on disease loss.
     p_vars = [var for var in tf.trainable_variables() if 'Process_Network' in var.name or 'Plant_Neurons' in var.name]
     d_vars = [var for var in tf.trainable_variables() if 'Disease_Neurons' in var.name]
 
+    # Calculate the losses per network
     p_loss = ops.xentropy_loss(p_lab,p_log,p_vars,name = "Plant_Loss")
     d_loss = ops.xentropy_loss(d_lab,d_log,d_vars,name = "Disease_Loss")
+
+    # Flatten the logits so that we only have one output instead of 10
     p_log = tf.argmax(p_log,-1)
     d_log = tf.argmax(d_log,-1)
+
+    # Log the accuracy
     p_acc  = ops.accuracy(p_lab,p_log,name = 'Plant_Accuracy')
     d_acc  = ops.accuracy(d_lab,d_log,name = 'Disease_Accuracy')
 
+    # Create a variable in order to get these operations out of the network
     metrics = (p_loss,d_loss,p_acc,d_acc)
 
+  # Setup the trainer
   with tf.variable_scope('Trainer') as scope:
     train = tf.assign_add(global_step,1,name = 'Global_Step')
     if training:
@@ -178,9 +187,9 @@ def metrics(global_step,p_lab,d_lab,training):
       d_train = trainer(global_step,d_loss,d_vars)
       train   = (train,p_train,d_train)
 
-  return d_log,train,metrics
+  return p_log,d_log,train,metrics
 
-# Runs the tape training.
+# Runs the training.
 def train(train_run = True, restore = False):
   with tf.Graph().as_default():
       config         = tf.ConfigProto(allow_soft_placement = True)
@@ -199,9 +208,9 @@ def train(train_run = True, restore = False):
         p_lab = tf.reshape(p_lab,[FLAGS.batch_size])
         d_lab = tf.reshape(d_lab,[FLAGS.batch_size])
 
-      p_log,d_log         = inference(images,training = train_run,name = FLAGS.net_name,trainable = True)
+      p_log,d_log               = inference(images,training = train_run,name = FLAGS.net_name,trainable = True)
       # d_log at this point is full [10][batch][10], metrics formats it correctly.
-      d_log,train,metrics = metrics(global_step,p_lab,d_log,d_lab,training = train_run)
+      p_log,d_log,train,metrics = metrics(global_step,p_lab,d_log,d_lab,training = train_run)
 
       b_norm_vars = [var for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES) if 'batch_norm' in var.name]
 
@@ -295,8 +304,9 @@ def train(train_run = True, restore = False):
           saver.save(sess,savestr,global_step = step)
           saver.save(sess,logstr,global_step = step)
       except tf.errors.OutOfRangeError:
-        saver.save(sess,savestr,global_step = step)
-        saver.save(sess,logstr,global_step = step)
+        if train_run:
+          saver.save(sess,savestr,global_step = step)
+          saver.save(sess,logstr,global_step = step)
         print("Sumthin messed up man.")
       finally:
         if train_run:
@@ -307,8 +317,10 @@ def train(train_run = True, restore = False):
       sess.close()
 
 def main(_):
-  for epoch in range(2,10):
+  for epoch in range(0,3):
+    # Train a network for 1 epoch
     train(train_run = True,  restore = (epoch != 0) )
+    # Run validation
     train(train_run = False, restore = False)
     print("Epoch %d training+validation complete"%epoch+1)
 
