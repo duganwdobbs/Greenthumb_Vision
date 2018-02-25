@@ -8,6 +8,10 @@ flags.DEFINE_integer('bn_scope'  ,0,'Incrementer for batch norm scopes')
 
 bn_scope = 0
 
+def init_scope_vars():
+  FLAGS.conv_scope = 0
+  FLAGS.bn_scope = 0
+
 def delist(net):
   if type(net) is list:
     net = tf.concat(net,-1,name = 'cat')

@@ -63,6 +63,7 @@ def trainer(global_step,loss,train_vars,learning_rate = .001):
 
 # The segmentation network.
 def inference(global_step,images,p_lab,d_lab,training,name,trainable = True):
+  ops.init_scope_vars()
   with tf.variable_scope(name) as scope:
     # Preform some image preprocessing
     net = images
@@ -231,6 +232,8 @@ def train(train_run = True, restore = False):
       savestr        = FLAGS.run_dir + FLAGS.ckpt_name
       # Location and name to inspect checkpoint for logging.
       logstr         = filestr + 'model.ckpt'
+      if not train_run:
+        savestr = logstr
       # Setting up summary writer.
       writer         = tf.summary.FileWriter(filestr,sess.graph)
 
@@ -239,7 +242,8 @@ def train(train_run = True, restore = False):
       if(restore or not train_run):
         # inspect(tf.train.latest_checkpoint(FLAGS.run_dir))
         if restore:
-          saver = tf.train.Saver(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES))
+          restore_vars = [var for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES) if 'Optimizer' not in var.name]
+          saver = tf.train.Saver(restore_vars)
         else:
           saver = tf.train.Saver(saver_vars)
 
@@ -247,7 +251,7 @@ def train(train_run = True, restore = False):
         if not train_run:
           # Save the loaded testing checkpoint in the log folder.
           saver.save(sess,logstr)
-      saver          = tf.train.Saver(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES))
+      saver     = tf.train.Saver(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES))
 
       # Starts the input generator
       coord          = tf.train.Coordinator()
@@ -303,10 +307,10 @@ def train(train_run = True, restore = False):
       sess.close()
 
 def main(_):
-  for x in range(10):
-    train(train_run = True,  restore = x!=0 )
+  for epoch in range(2,10):
+    train(train_run = True,  restore = (epoch != 0) )
     train(train_run = False, restore = False)
-    print("Epoch %d training+validation complete"%x+1)
+    print("Epoch %d training+validation complete"%epoch+1)
 
 if __name__ == '__main__':
   tf.app.run()
