@@ -129,7 +129,7 @@ def inference(images,training,name,trainable = True):
       # Construct a number of final layers for diseases equal to the number of
       # plants.
       d_net = []
-      chan = tf.layers.dense(net,neurons)
+      chan = tf.layers.dense(net,neurons)#, name = 'Disease_Neurons)'
       for x in range(FLAGS.num_plant_classes):
         d_n = tf.layers.dense(chan,FLAGS.num_disease_classes,name = 'Disease_%d_Decider'%x)
         d_net.append(d_n)
