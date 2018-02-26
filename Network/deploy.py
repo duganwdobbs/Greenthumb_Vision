@@ -51,9 +51,20 @@ class Deploy_Network:
       #    p_log: [# Plant Classes #]
       #    d_log: [# Plant Classes #][#Disease Classes#]
       im = tf.reshape(self.ims,[1,256,256,3])
-      self.p_log, self.d_log          = inference(im,training = False,name = 'PlantVision',trainable = False)
+      self.p_log, self.d_log          = inference(im,training = True,name = 'PlantVision',trainable = False)
+
       self.p_logs = tf.squeeze(self.p_log)
+      self.p_log  = tf.argmax(self.p_logs)
+
       self.d_logs = tf.squeeze(self.d_log)
+
+      size = [1,FLAGS.num_disease_classes]
+      # Extract the disease logit per example in batch
+      index = self.p_log
+      d_log = []
+      start = [index,0]
+      d_log = tf.slice(self.d_logs,start,size)
+      self.d_logs = tf.reshape(d_log,[FLAGS.batch_size,FLAGS.num_disease_classes])
 
       # Setting up system to load a saved model
       saver = tf.train.Saver(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES))
@@ -73,9 +84,9 @@ class Deploy_Network:
   # Returns output of statistical probability matrix where the max index is
   #   the label.
   def run(self,feed_image):
-    outputs = [self.p_logs,self.d_logs]
-    _p_logs,_d_logs = self.sess.run(outputs,{self.ims: feed_image})
-    return _p_logs, _d_logs
+    outputs = [self.p_log,self.d_logs]
+    _p_log,_d_log = self.sess.run(outputs,{self.ims: feed_image})
+    return _p_log, _d_log
   # end run
 
   def p_log_to_desc(self,p_log):

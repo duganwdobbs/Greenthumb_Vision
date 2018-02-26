@@ -29,7 +29,7 @@ flags.DEFINE_boolean('log_imgs'           ,False ,'If we log images to tfrecord'
 
 
 flags.DEFINE_integer('num_epochs'         ,1     ,'Number of epochs to run trainer.')
-flags.DEFINE_integer('batch_size'         ,4     ,'Batch size for training.')
+flags.DEFINE_integer('batch_size'         ,6     ,'Batch size for training.')
 flags.DEFINE_integer('train_steps'        ,100000,'Number of steps for training on counting')
 flags.DEFINE_integer('num_plant_classes'  ,10    ,'# Classes')
 flags.DEFINE_integer('num_disease_classes',10    ,'# Classes')
@@ -143,7 +143,7 @@ def build_metrics(global_step,p_lab,d_lab,p_log,d_logs,training):
     #    NOTE: The disease loss function only trains based on this final layer.
     #          IE: The disease gradient does not flow through the whole network,
     #              using the plant network as its preprocessing.
-    index = d_lab #if training else tf.argmax(p_log)
+    index = p_lab #if training else tf.argmax(p_log)
     index = tf.cast(index,tf.int32)
 
     size = [1,1,FLAGS.num_disease_classes]
@@ -293,7 +293,7 @@ def train(train_run = True, restore = False):
           writer.add_summary(_summ_result,step)
 
           #Write the cmat to a file at each step, write images if testing.
-          if not train_run and step % 1000 == 0:
+          if not train_run:# and step % 1000 == 0:
             for x in range(len(_imgs)):
               for d in range(FLAGS.batch_size):
                 with open(filestr + '%d_%d_plant_%d_%d_disease_%d_%d'%(step,d,_p_lab[d],_p_log[d],_d_lab[d],_d_log[d]) + '_img.png','wb+') as f:
@@ -323,7 +323,7 @@ def train(train_run = True, restore = False):
 def main(_):
   for epoch in range(0,3):
     # Train a network for 1 epoch
-    # train(train_run = True,  restore = (epoch != 0) )
+    train(train_run = True,  restore = (epoch != 0) )
     # Run validation
     train(train_run = False, restore = False)
     print("Epoch %d training+validation complete"%(epoch+1))

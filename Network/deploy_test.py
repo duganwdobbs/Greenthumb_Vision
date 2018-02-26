@@ -34,12 +34,11 @@ def main(_):
       image = Image.open(v)
       image = np.asarray(image)
       p_log,d_log = net.run(image)
+      print(p_log)
+      input(d_log)
       # p_log = p_log * 100
       # d_log = d_log * 100
-      for x in range(len(ps)):
-        print("\n%s : %f, "%(ps[x],p_log[x]))
-        for y in range(len(ds[x])):
-          print("%s : %f, "%(ds[x][y],d_log[x][y]),end=" ")
+      # print("Image %d, %s, %s"%(d+1,ps[p_log],ds[p_log][d_log]))
 
 
 
