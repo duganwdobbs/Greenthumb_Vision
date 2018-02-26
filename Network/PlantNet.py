@@ -23,7 +23,6 @@ elif platform.system() == 'Linux':
 
 flags.DEFINE_boolean('l2_loss'            ,True  ,'If we use l2 regularization')
 flags.DEFINE_boolean('batch_norm'         ,True  ,'If we use batch normalization')
-flags.DEFINE_boolean('lr_decay'           ,True  ,'If we use Learning Rate Decay')
 flags.DEFINE_boolean('advanced_logging'   ,False ,'If we log metadata and histograms')
 flags.DEFINE_boolean('log_imgs'           ,False ,'If we log images to tfrecord')
 
@@ -40,11 +39,11 @@ flags.DEFINE_string ('train_dir'  , FLAGS.base_dir                 ,'Location of
 flags.DEFINE_string ('ckpt_name'  ,'greenthumb.ckpt'               ,'Checkpoint name')
 flags.DEFINE_string ('net_name'   ,'PlantVision'                   ,'Network name')
 
-def trainer(global_step,loss,train_vars,learning_rate = .001):
+def trainer(global_step,loss,train_vars,fancy = True,learning_rate = .001):
   update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
   with tf.control_dependencies(update_ops):
     with tf.variable_scope("Optimizer") as scope:
-      if FLAGS.lr_decay:
+      if fancy:
         learning_rate = tf.train.exponential_decay(learning_rate, global_step,
                                                    2500, 0.85, staircase=True)
         tf.summary.scalar("Learning_Rate",learning_rate)
@@ -119,12 +118,12 @@ def inference(images,training,name,trainable = True):
 
       # Fully connected network with number of neurons equal to the number of
       #    parameters in the network at this point
-      p_log = tf.layers.dense(net,neurons)
+      p_log = tf.layers.dense(net,neurons,name = 'Plant_Neurons')
 
       # Fully connected layer to extract the plant classification
       #    NOTE: This plant classification will be used to extract the proper
       #          disease classification matrix
-      p_log = tf.layers.dense(p_log,FLAGS.num_plant_classes)
+      p_log = tf.layers.dense(p_log,FLAGS.num_plant_classes,name = 'Plant_Decider')
 
     with tf.variable_scope('Disease_Neurons') as scope:
       # Construct a number of final layers for diseases equal to the number of
@@ -132,8 +131,8 @@ def inference(images,training,name,trainable = True):
       d_net = []
       chan = tf.layers.dense(net,neurons)
       for x in range(FLAGS.num_plant_classes):
-        chan = tf.layers.dense(chan,FLAGS.num_disease_classes,name = 'Disease_%d'%x)
-        d_net.append(chan)
+        d_n = tf.layers.dense(chan,FLAGS.num_disease_classes,name = 'Disease_%d_Decider'%x)
+        d_net.append(d_n)
       d_net = tf.stack(d_net)
       d_log = d_net
 
@@ -168,8 +167,8 @@ def build_metrics(global_step,p_lab,d_lab,p_log,d_logs,training):
     d_vars = [var for var in tf.trainable_variables() if 'Disease_Neurons' in var.name]
 
     # Calculate the losses per network
-    p_loss = ops.xentropy_loss(p_lab,p_log,p_vars,name = "Plant_Loss")
-    d_loss = ops.xentropy_loss(d_lab,d_log,d_vars,name = "Disease_Loss")
+    p_loss = ops.xentropy_loss(p_lab,p_log,p_vars,l2 = True ,name = "Plant_Loss")
+    d_loss = ops.xentropy_loss(d_lab,d_log,d_vars,l2 = False,name = "Disease_Loss")
 
     # Flatten the logits so that we only have one output instead of 10
     p_log = tf.argmax(p_log,-1)
@@ -186,8 +185,8 @@ def build_metrics(global_step,p_lab,d_lab,p_log,d_logs,training):
   with tf.variable_scope('Trainer') as scope:
     train = tf.assign_add(global_step,1,name = 'Global_Step')
     if training:
-      p_train = trainer(global_step,p_loss,p_vars)
-      d_train = trainer(global_step,d_loss,d_vars)
+      p_train = trainer(global_step,p_loss,p_vars,fancy = True)
+      d_train = trainer(global_step,d_loss,d_vars,fancy = False)
       train   = (train,p_train,d_train)
 
   return p_log,d_log,train,metrics
@@ -326,7 +325,7 @@ def train(train_run = True, restore = False):
 def main(_):
   for epoch in range(0,3):
     # Train a network for 1 epoch
-    train(train_run = True,  restore = (epoch != 0) )
+    train(train_run = True,  restore = epoch != 0 )
     # Run validation
     train(train_run = False, restore = False)
     print("Epoch %d training+validation complete"%(epoch+1))
