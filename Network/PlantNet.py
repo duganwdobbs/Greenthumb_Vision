@@ -29,7 +29,7 @@ flags.DEFINE_boolean('log_imgs'           ,False ,'If we log images to tfrecord'
 
 
 flags.DEFINE_integer('num_epochs'         ,1     ,'Number of epochs to run trainer.')
-flags.DEFINE_integer('batch_size'         ,6     ,'Batch size for training.')
+flags.DEFINE_integer('batch_size'         ,4     ,'Batch size for training.')
 flags.DEFINE_integer('train_steps'        ,100000,'Number of steps for training on counting')
 flags.DEFINE_integer('num_plant_classes'  ,10    ,'# Classes')
 flags.DEFINE_integer('num_disease_classes',10    ,'# Classes')
@@ -107,29 +107,32 @@ def inference(images,training,name,trainable = True):
       #    inferences. Fully connected inferences do not work with imaginary
       #    numbers. The error would always have an i/j term that will not be able
       #    to generate a correct gradient for.
+
       # net = tf.ifft2d(net)
 
-    with tf.variable_scope('Plant_Neurons') as scope:
       # Theoretically, the network will be 8x8x128, for 8192 neurons in the first
       #    fully connected network.
       net = util.squish_to_batch(net)
       _b,neurons = net.get_shape().as_list()
 
+    with tf.variable_scope('Plant_Neurons') as scope:
+
       # Fully connected network with number of neurons equal to the number of
       #    parameters in the network at this point
-      net = tf.layers.dense(net,neurons)
+      p_log = tf.layers.dense(net,neurons)
 
       # Fully connected layer to extract the plant classification
       #    NOTE: This plant classification will be used to extract the proper
       #          disease classification matrix
-      p_log      = tf.layers.dense(net,FLAGS.num_plant_classes)
+      p_log = tf.layers.dense(p_log,FLAGS.num_plant_classes)
 
     with tf.variable_scope('Disease_Neurons') as scope:
       # Construct a number of final layers for diseases equal to the number of
       # plants.
       d_net = []
+      chan = tf.layers.dense(net,neurons)
       for x in range(FLAGS.num_plant_classes):
-        chan = tf.layers.dense(net,FLAGS.num_disease_classes,name = 'Disease_%d'%x)
+        chan = tf.layers.dense(chan,FLAGS.num_disease_classes,name = 'Disease_%d'%x)
         d_net.append(chan)
       d_net = tf.stack(d_net)
       d_log = d_net
