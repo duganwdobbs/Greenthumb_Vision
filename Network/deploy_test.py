@@ -5,6 +5,7 @@ from   deploy     import Deploy_Network
 import tensorflow as     tf
 import numpy      as     np
 
+import filetools
 import sys
 import os
 
@@ -22,8 +23,14 @@ def main(_):
     net = Deploy_Network()
     ps  = net.get_plants()
     ds  = net.get_diseases()
-    for d in range(1,len(sys.argv)):
-      v     = sys.argv[d]
+    paths = sys.argv[1:]
+    if paths[0] is 'v':
+      fs = filetools.find_files(paths[1],ext = '.png')
+      paths = [paths[1] + '/' + f for f in fs]
+      print(paths)
+
+    for d in range(1,len(paths)):
+      v     = paths[d]
       image = Image.open(v)
       image = np.asarray(image)
       p_log,d_log = net.run(image)
