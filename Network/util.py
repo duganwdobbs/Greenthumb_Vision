@@ -21,7 +21,7 @@ def get_Im_Specs():
   return int(imgW),int(imgH),int(patW),int(patH),int(num_pat)
 
 def ckpt_inspect(file):
-  tfcheckprint(file_name = file, tensor_name = '', all_tensors = False)
+  tfcheckprint(file_name = file, tensor_name = '', all_tensors = True,all_tensor_names = True)
   input("PRESS ENTER TO CONTINUE...")
 
 def tfrecord_inspect(file):

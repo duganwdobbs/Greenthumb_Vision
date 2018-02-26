@@ -136,7 +136,7 @@ def inference(images,training,name,trainable = True):
 
     return p_log,d_log
 
-def metrics(global_step,p_lab,d_lab,training):
+def build_metrics(global_step,p_lab,d_lab,p_log,d_logs,training):
   with tf.variable_scope('Formatting') as scope:
     # If we're training, we want to not use the plant network output, rather the
     #    plant label. This ensures that the disease layers train properly.
@@ -151,7 +151,7 @@ def metrics(global_step,p_lab,d_lab,training):
     d_log = []
     for x in range(FLAGS.batch_size):
       start = [index[x],x,0]
-      val = tf.slice(d_net,start,size)
+      val = tf.slice(d_logs,start,size)
       d_log.append(val)
     d_log = tf.stack(d_log)
     d_log = tf.reshape(d_log,[FLAGS.batch_size,FLAGS.num_disease_classes])
@@ -208,9 +208,9 @@ def train(train_run = True, restore = False):
         p_lab = tf.reshape(p_lab,[FLAGS.batch_size])
         d_lab = tf.reshape(d_lab,[FLAGS.batch_size])
 
-      p_log,d_log               = inference(images,training = train_run,name = FLAGS.net_name,trainable = True)
+      p_logs,d_logs             = inference(images,training = train_run,name = FLAGS.net_name,trainable = True)
       # d_log at this point is full [10][batch][10], metrics formats it correctly.
-      p_log,d_log,train,metrics = metrics(global_step,p_lab,d_log,d_lab,training = train_run)
+      p_log,d_log,train,metrics = build_metrics(global_step,p_lab,d_lab,p_logs,d_logs,training = train_run)
 
       b_norm_vars = [var for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES) if 'batch_norm' in var.name]
 
@@ -267,7 +267,7 @@ def train(train_run = True, restore = False):
       threads        = tf.train.start_queue_runners(sess = sess, coord = coord)
 
       try:
-        ops = [train,summaries,metrics,p_lab,p_log,d_lab,d_log] if train_run else [train,summaries,metrics,save_imgs,p_lab,p_log,d_lab,d_log]
+        ops = [train,summaries,metrics,p_lab,p_log,d_lab,d_log] if train_run else [train,summaries,metrics,save_imgs,p_lab,p_log,d_lab,d_log,p_logs,d_logs]
 
         step = tf.train.global_step(sess,global_step)
         while not coord.should_stop() and step <= FLAGS.train_steps:
@@ -277,7 +277,11 @@ def train(train_run = True, restore = False):
           if train_run:
             _,_summ_result,_metrics,_p_lab,_p_log,_d_lab,_d_log       = sess.run(ops, options = run_options, run_metadata = run_metadata)
           else:
-            _,_summ_result,_metrics,_imgs,_p_lab,_p_log,_d_lab,_d_log = sess.run(ops, options = run_options, run_metadata = run_metadata)
+            _,_summ_result,_metrics,_imgs,_p_lab,_p_log,_d_lab,_d_log,_p_logs,_d_logs = sess.run(ops, options = run_options, run_metadata = run_metadata)
+            print("Plant")
+            print(_p_logs)
+            print("Disease")
+            print(_d_logs)
 
           # Some basic label / logit output
           # for d in range(FLAGS.batch_size):
@@ -319,10 +323,10 @@ def train(train_run = True, restore = False):
 def main(_):
   for epoch in range(0,3):
     # Train a network for 1 epoch
-    train(train_run = True,  restore = (epoch != 0) )
+    # train(train_run = True,  restore = (epoch != 0) )
     # Run validation
     train(train_run = False, restore = False)
-    print("Epoch %d training+validation complete"%epoch+1)
+    print("Epoch %d training+validation complete"%(epoch+1))
 
 if __name__ == '__main__':
   tf.app.run()
