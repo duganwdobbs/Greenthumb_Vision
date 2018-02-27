@@ -138,6 +138,30 @@ def inference(images,training,name,trainable = True):
 
     return p_log,d_log
 
+def per_cat_acc(p_lab,d_lab,p_log,d_log):
+  with tf.variable_scope("Per_Class_Metrics") as scope:
+    oh_p_lab = tf.one_hot(p_lab)
+    oh_d_lab = tf.one_hot(d_lab)
+    oh_p_log = tf.one_hot(p_log)
+    oh_d_log = tf.one_hot(d_log)
+
+    with tf.variable_scope("Sum_Ops") as scope:
+      sum_p_lab = tf.zeros(tf.int64,(FLAGS.num_plant_classes))
+      sum_d_lab = tf.zeros(tf.int64,(FLAGS.num_plant_classes))
+      sum_p_log = tf.zeros(tf.int64,(FLAGS.num_plant_classes))
+      sum_d_log = tf.zeros(tf.int64,(FLAGS.num_plant_classes))
+
+      op1       = tf.assign_add(sum_p_lab,oh_p_lab)
+      op2       = tf.assign_add(sum_d_lab,oh_d_lab)
+      op3       = tf.assign_add(sum_p_log,oh_p_log)
+      op4       = tf.assign_add(sum_d_log,oh_d_log)
+      ops       = (op1,op2,op3,op4)
+
+    for plant_it in range(FLAGS.num_plant_classes):
+      p_acc = sum_p_log[x]
+      tf.summary.scalar
+
+
 def build_metrics(global_step,p_lab,d_lab,p_log,d_logs,training):
   with tf.variable_scope('Formatting') as scope:
     # If we're training, we want to not use the plant network output, rather the
@@ -280,10 +304,10 @@ def train(train_run = True, restore = False):
             _,_summ_result,_metrics,_p_lab,_p_log,_d_lab,_d_log       = sess.run(ops, options = run_options, run_metadata = run_metadata)
           else:
             _,_summ_result,_metrics,_imgs,_p_lab,_p_log,_d_lab,_d_log,_p_logs,_d_logs = sess.run(ops, options = run_options, run_metadata = run_metadata)
-            print("Plant")
-            print(_p_logs)
-            print("Disease")
-            print(_d_logs)
+            # print("Plant")
+            # print(_p_logs)
+            # print("Disease")
+            # print(_d_logs)
 
           # Some basic label / logit output
           # for d in range(FLAGS.batch_size):
@@ -295,7 +319,7 @@ def train(train_run = True, restore = False):
           writer.add_summary(_summ_result,step)
 
           #Write the cmat to a file at each step, write images if testing.
-          if not train_run:# and step % 1000 == 0:
+          if not train_run and step % 100 == 0:
             for x in range(len(_imgs)):
               for d in range(FLAGS.batch_size):
                 with open(filestr + '%d_%d_plant_%d_%d_disease_%d_%d'%(step,d,_p_lab[d],_p_log[d],_d_lab[d],_d_log[d]) + '_img.png','wb+') as f:
@@ -323,12 +347,12 @@ def train(train_run = True, restore = False):
       sess.close()
 
 def main(_):
-  for epoch in range(0,3):
+  # for epoch in range(1,1):
     # Train a network for 1 epoch
-    train(train_run = True,  restore = epoch != 0 )
+    # train(train_run = True,  restore = epoch != 0 )
     # Run validation
     train(train_run = False, restore = False)
-    print("Epoch %d training+validation complete"%(epoch+1))
+    # print("Epoch %d training+validation complete"%(epoch+1))
 
 if __name__ == '__main__':
   tf.app.run()
