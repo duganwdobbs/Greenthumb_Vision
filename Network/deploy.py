@@ -66,6 +66,9 @@ class Deploy_Network:
       d_log = tf.slice(self.d_logs,start,size)
       self.d_logs = tf.reshape(d_log,[FLAGS.batch_size,FLAGS.num_disease_classes])
 
+      self.p_logs = tf.nn.softmax(self.p_logs)
+      self.d_logs = tf.nn.softmax(self.d_logs)
+
       # Setting up system to load a saved model
       saver = tf.train.Saver(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES))
       # Loading the saved model
@@ -84,22 +87,24 @@ class Deploy_Network:
   # Returns output of statistical probability matrix where the max index is
   #   the label.
   def run(self,feed_image):
-    outputs = [self.p_log,self.d_logs]
-    _p_log,_d_log = self.sess.run(outputs,{self.ims: feed_image})
-    return _p_log, _d_log
+    outputs = [self.p_logs,self.d_logs]
+    _p_logs,_d_logs = self.sess.run(outputs,{self.ims: feed_image})
+    return _p_logs, _d_logs
   # end run
 
   def p_log_to_desc(self,p_log):
     return self.plants[p_log]
 
-  def get_plants(self):
-    return self.plants
-
   def d_log_to_desc(self,p_log,d_log):
     return self.diseases[p_log][d_log]
 
-  def get_diseases(self):
-    return self.diseases
+  def result_verbose(self,p_logs,d_logs):
+    p_conf = p_logs[np.argmax(p_logs)] * 100
+    d_conf = d_logs[np.argamx(d_logs)] * 100
+    plant  = p_log_do_desc(np.argmax(p_logs))
+    disease= d_log_do_desc(np.argmax(d_logs))
+    print("We are %.2f%% certain that this is a %s plant, and %.2f%% certain that this %s has %s disease."%(p_conf,plant,d_conf,plant,disease))
+
 
 def main(_):
   net = Deploy_Network

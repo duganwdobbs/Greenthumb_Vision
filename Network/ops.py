@@ -235,60 +235,6 @@ def count_rel_err(labels,logits,global_step):
 
     return rel_err,update
 
-# Relative Accuracy calculation, I don't like this!
-# |Lab - Log| / Lab
-def count_rel_acc(labels,logits,global_step):
-  with tf.variable_scope("rel_acc_calc") as scope:
-    labels = tf.cast(labels,tf.float32)
-    logits = tf.cast(logits,tf.float32)
-    g_step = tf.cast(global_step,tf.float32)
-    sum_acc= tf.Variable(0,dtype = tf.float32,name = 'Sum_Rel_Acc')
-
-    l_min = tf.minimum(labels,logits)
-    l_max = tf.maximum(labels,logits)
-    rel = tf.divide(tf.abs(tf.subtract(logits,labels)),labels)
-
-    zero = tf.constant(0,dtype=tf.float32,name='zero')
-    one  = tf.constant(1,dtype=tf.float32,name='one')
-    full_zeros = tf.zeros((FLAGS.batch_size),tf.float32)
-    full_zeros = tf.squeeze(full_zeros)
-    full_ones  = tf.ones((FLAGS.batch_size),tf.float32)
-    full_ones  = tf.squeeze(full_ones)
-    full_false = []
-    for x in range(FLAGS.batch_size):
-      full_false.append(False)
-    full_false = tf.convert_to_tensor(full_false)
-    full_false = tf.squeeze(full_false)
-
-    # Get where NAN, inf, and logits is zero
-    nans  = tf.is_nan(rel)
-    infs  = tf.is_inf(rel)
-    zeros = tf.equal(logits,zero)
-
-    #If its a zero, get the NaN position, otherwise false.
-    z_nan = tf.where(zeros,nans,full_false)
-    z_inf = tf.where(zeros,infs,full_false)
-    # Set to 1
-    rel   = tf.where(z_nan,full_ones,rel)
-    rel   = tf.where(z_inf,full_ones,rel)
-
-    # Any leftover NaN or inf is where we counted wrong, so the rel acc is zero.
-    nans  = tf.is_nan(rel)
-    infs  = tf.is_inf(rel)
-    rel   = tf.where(nans,full_zeros,rel)
-    rel   = tf.where(infs,full_zeros,rel)
-
-    # Get the minimum of relative acc or 1/ rel acc
-    rel   = tf.minimum(rel,tf.divide(one,rel))
-
-    rel = tf.reduce_mean(rel,-1)
-
-    update = tf.assign_add(sum_acc,rel)
-    value  = tf.divide(sum_acc,g_step)
-
-    tf.summary.scalar('Relative Accuracy',tf.multiply(value,100))
-    return rel,update
-
 
 def dense_reduction(net,training, filters = 2, kernel = 3, kmap = 5, stride = 1,
                 activation = lrelu, trainable = True,name = 'Dense_Block'):

@@ -1,6 +1,0 @@
-model_checkpoint_path: "E:/Greenthumb_Vision/network_log/greenthumb.ckpt"
-all_model_checkpoint_paths: "E:/Greenthumb_Vision/network_log/greenthumb.ckpt-41800"
-all_model_checkpoint_paths: "E:/Greenthumb_Vision/network_log/tensorlogs/23_Feb_2018_19_33_TRAIN/model.ckpt-41800"
-all_model_checkpoint_paths: "E:/Greenthumb_Vision/network_log/greenthumb.ckpt-41900"
-all_model_checkpoint_paths: "E:/Greenthumb_Vision/network_log/tensorlogs/23_Feb_2018_19_33_TRAIN/model.ckpt-41900"
-all_model_checkpoint_paths: "E:/Greenthumb_Vision/network_log/greenthumb.ckpt"

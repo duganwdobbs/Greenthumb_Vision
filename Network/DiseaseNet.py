@@ -47,7 +47,7 @@ def trainer(global_step,loss,train_vars,fancy = True,learning_rate = .001):
     with tf.variable_scope("Optimizer") as scope:
       if fancy:
         learning_rate = tf.train.exponential_decay(learning_rate, global_step,
-                                                   2500, 0.85, staircase=True)
+                                                   7500, 0.85, staircase=True)
         tf.summary.scalar("Learning_Rate",learning_rate)
 
       optomizer = tf.train.AdamOptimizer(learning_rate,epsilon = 1e-5)
@@ -132,7 +132,7 @@ def build_metrics(global_step,d_lab,d_logs,training):
     d_vars = [var for var in tf.trainable_variables() if 'Process_Network' in var.name or 'Disease_Neurons' in var.name]
 
     # Calculate the losses per network
-    d_loss = ops.xentropy_loss(d_lab,d_logs,d_vars,l2 = False,name = "Disease_Loss")
+    d_loss = ops.xentropy_loss(d_lab,d_logs,d_vars,l2 = True,name = "Disease_Loss")
 
     # Flatten the logits so that we only have one output instead of 10
     d_log = tf.argmax(d_logs,-1)

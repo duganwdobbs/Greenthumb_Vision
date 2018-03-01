@@ -82,10 +82,10 @@ for x in range(len(plants)):
   # Write the disease class test list.
   print("%s: %d Testing, %d Training"%(plants[x],len(disease_test),len(disease_train)))
   shuffle(disease_test)
-  writer(disease_test,save_dir + '%s-Test.tfrecords'%plants[x])
+  # writer(disease_test,save_dir + '%s-Test.tfrecords'%plants[x])
   # Write the disease class train list.
   shuffle(disease_train)
-  writer(disease_train,save_dir + '%s-Train.tfrecords'%plants[x])
+  # writer(disease_train,save_dir + '%s-Train.tfrecords'%plants[x])
 
   #Append to the running lists for plant test+train
   for f in disease_test:
@@ -96,7 +96,7 @@ for x in range(len(plants)):
 print("%s: %d Testing, %d Training"%("Full Data Split",len(plant_test),len(plant_train)))
 # Write the plant test list
 shuffle(plant_test)
-writer(plant_test,save_dir  + 'PlantVision-Test.tfrecords')
+# writer(plant_test,save_dir  + 'PlantVision-Test.tfrecords')
 # Write the plant train list
 shuffle(plant_train)
-writer(plant_train,save_dir + 'PlantVision-Train.tfrecords')
+# writer(plant_train,save_dir + 'PlantVision-Train.tfrecords')
