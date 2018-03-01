@@ -62,7 +62,7 @@ for x in range(len(plants)):
   disease_test  = []
   disease_train = []
   for y in range(len(diseases[x])):
-    print("%s %s"%(plants[x],diseases[x][y]))
+    # print("%s %s"%(plants[x],diseases[x][y]))
     # Find the files that conform to given plant cat X and disease cat Y
     file_list = filetools.find_files(base_dir + '/' + director[x][y] + '/',img_ext)
     # Shuffle the files
@@ -83,15 +83,18 @@ for x in range(len(plants)):
     # End disease loop
   # Write the disease class test list.
   print("%s: %d Testing, %d Training"%(plants[x],len(disease_test),len(disease_train)))
-  writer(disease_test,save_dir + '%s-Test.tfrecords'%plants[x])
+  # writer(disease_test,save_dir + '%s-Test.tfrecords'%plants[x])
   # Write the disease class train list.
-  writer(disease_train,save_dir + '%s-Train.tfrecords'%plants[x])
+  # writer(disease_train,save_dir + '%s-Train.tfrecords'%plants[x])
 
   #Append to the running lists for plant test+train
-  plant_test.append(disease_test)
-  plant_train.append(disease_train)
+  for f in disease_test:
+    plant_test.append(f)
+  for f in disease_train:
+    plant_train.append(f)
 
+print("%s: %d Testing, %d Training"%("Full Data Split",len(plant_test),len(plant_train)))
 # Write the plant test list
-writer(plant_test,save_dir  + 'PlantVision-Test.tfrecords')
+# writer(plant_test,save_dir  + 'PlantVision-Test.tfrecords')
 # Write the plant train list
-writer(plant_train,save_dir + 'PlantVision-Train.tfrecords')
+# writer(plant_train,save_dir + 'PlantVision-Train.tfrecords')
