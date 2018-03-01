@@ -65,8 +65,6 @@ for x in range(len(plants)):
     # print("%s %s"%(plants[x],diseases[x][y]))
     # Find the files that conform to given plant cat X and disease cat Y
     file_list = filetools.find_files(base_dir + '/' + director[x][y] + '/',img_ext)
-    # Shuffle the files
-    shuffle(file_list)
     # Create image / label tuples
     img_lab_l = [(base_dir + '/' + director[x][y] + '/' + f, x, y) for f in file_list]
     # Determine the number of testing examples
@@ -83,9 +81,11 @@ for x in range(len(plants)):
     # End disease loop
   # Write the disease class test list.
   print("%s: %d Testing, %d Training"%(plants[x],len(disease_test),len(disease_train)))
-  # writer(disease_test,save_dir + '%s-Test.tfrecords'%plants[x])
+  shuffle(disease_test)
+  writer(disease_test,save_dir + '%s-Test.tfrecords'%plants[x])
   # Write the disease class train list.
-  # writer(disease_train,save_dir + '%s-Train.tfrecords'%plants[x])
+  shuffle(disease_train)
+  writer(disease_train,save_dir + '%s-Train.tfrecords'%plants[x])
 
   #Append to the running lists for plant test+train
   for f in disease_test:
@@ -95,6 +95,8 @@ for x in range(len(plants)):
 
 print("%s: %d Testing, %d Training"%("Full Data Split",len(plant_test),len(plant_train)))
 # Write the plant test list
-# writer(plant_test,save_dir  + 'PlantVision-Test.tfrecords')
+shuffle(plant_test)
+writer(plant_test,save_dir  + 'PlantVision-Test.tfrecords')
 # Write the plant train list
-# writer(plant_train,save_dir + 'PlantVision-Train.tfrecords')
+shuffle(plant_train)
+writer(plant_train,save_dir + 'PlantVision-Train.tfrecords')

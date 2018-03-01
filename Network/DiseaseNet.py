@@ -124,7 +124,7 @@ def inference(images,training,name,trainable = True):
 
     return d_log
 
-def build_metrics(global_step,p_lab,d_lab,d_logs,training):
+def build_metrics(global_step,d_lab,d_logs,training):
   # Get the losses and metrics
   with tf.variable_scope('Metrics') as scope:
     # Seperate the variables out of each network, so that we do not train the
@@ -174,8 +174,7 @@ def train(train_run = True, restore = False, plant_class = 0):
         d_lab = tf.reshape(d_lab,[FLAGS.batch_size])
 
       d_logs              = inference(images,training = train_run,name = FLAGS.net_name,trainable = True)
-      # d_log at this point is full [10][batch][10], metrics formats it correctly.
-      d_log,train,metrics = build_metrics(global_step,p_lab,d_lab,d_logs,training = train_run)
+      d_log,train,metrics = build_metrics(global_step,d_lab,d_logs,training = train_run)
 
       b_norm_vars = [var for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES) if 'batch_norm' in var.name]
 
@@ -268,7 +267,7 @@ def train(train_run = True, restore = False, plant_class = 0):
         if train_run:
           saver.save(sess,savestr,global_step = step)
           saver.save(sess,logstr ,global_step = step)
-        print("Sumthin messed up man.")
+        print("Out of range error, Step: %d, intended?"%step)
       finally:
         if train_run:
           saver.save(sess,savestr)
