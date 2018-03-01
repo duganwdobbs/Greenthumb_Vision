@@ -209,9 +209,9 @@ def build_metrics(global_step,p_lab,d_lab,p_log,d_logs,training):
   with tf.variable_scope('Trainer') as scope:
     train = tf.assign_add(global_step,1,name = 'Global_Step')
     if training:
-      p_train = trainer(global_step,p_loss,p_vars,fancy = True)
-      d_train = trainer(global_step,d_loss,d_vars,fancy = False)
-      train   = (train,p_train,d_train)
+      # p_train = trainer(global_step,p_loss,p_vars,fancy = True)
+      d_train = trainer(global_step,d_loss,d_vars,fancy = True)
+      train   = (train,d_train)
 
   return p_log,d_log,train,metrics
 
@@ -319,7 +319,7 @@ def train(train_run = True, restore = False):
           writer.add_summary(_summ_result,step)
 
           #Write the cmat to a file at each step, write images if testing.
-          if not train_run and step % 100 == 0:
+          if not train_run and step % 1000 == 0:
             for x in range(len(_imgs)):
               for d in range(FLAGS.batch_size):
                 with open(filestr + '%d_%d_plant_%d_%d_disease_%d_%d'%(step,d,_p_lab[d],_p_log[d],_d_lab[d],_d_log[d]) + '_img.png','wb+') as f:
@@ -347,12 +347,12 @@ def train(train_run = True, restore = False):
       sess.close()
 
 def main(_):
-  # for epoch in range(1,1):
+  for epoch in range(0,3):
     # Train a network for 1 epoch
-    # train(train_run = True,  restore = epoch != 0 )
+    train(train_run = True,  restore = True )
     # Run validation
     train(train_run = False, restore = False)
-    # print("Epoch %d training+validation complete"%(epoch+1))
+    print("Epoch %d training+validation complete"%(epoch+1))
 
 if __name__ == '__main__':
   tf.app.run()

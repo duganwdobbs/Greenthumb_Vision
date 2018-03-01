@@ -11,7 +11,7 @@ from PIL import Image
 # Where to put your base directories.
 base_dir = ''
 if   platform.system() == 'Windows':
-  base_dir = 'E:/Greenthumb_Vision/color'
+  base_dir = 'E:/plantvillage/color'
 elif platform.system() == 'Linux':
   base_dir = '/data0/ddobbs/Cows/Cows Found'
   # /home/ddobbs/BinaLab-Semantic-Segmentation/data
@@ -51,28 +51,47 @@ director = [
             ['Tomato___healthy','Tomato___Bacterial_spot','Tomato___Early_blight','Tomato___Late_blight','Tomato___Leaf_Mold','Tomato___Septoria_leaf_spot','Tomato___Spider_mites Two-spotted_spider_mite','Tomato___Target_Spot','Tomato___Tomato_mosaic_virus','Tomato___Tomato_Yellow_Leaf_Curl_Virus']
               ]
 
+examples = []
+
 save_dir = base_dir + '../../'
 img_ext = '.JPG'
-img_lab = []
-# Loop through all of the plants
+
+plant_test  = []
+plant_train = []
 for x in range(len(plants)):
-  # Loop through all of the dieases for this plant
+  disease_test  = []
+  disease_train = []
   for y in range(len(diseases[x])):
-    # Build a list of images from this data
+    print("%s %s"%(plants[x],diseases[x][y]))
+    # Find the files that conform to given plant cat X and disease cat Y
     file_list = filetools.find_files(base_dir + '/' + director[x][y] + '/',img_ext)
-    print(len(file_list))
-    for z in file_list:
-      # Create an image / label triplet
-      img_lab.append((base_dir + '/' + director[x][y] + '/' + z,x,y))
+    # Shuffle the files
+    shuffle(file_list)
+    # Create image / label tuples
+    img_lab_l = [(base_dir + '/' + director[x][y] + '/' + f, x, y) for f in file_list]
+    # Determine the number of testing examples
+    test_len  = len(file_list) * 3 // 10
+    # Create a test list
+    test_list = img_lab_l[         :test_len]
+    # Create a train list starting from the end of the test list
+    train_list= img_lab_l[test_len:         ]
+    # Append these lists to the running plant list.
+    for f in test_list:
+      disease_test.append(f)
+    for f in train_list:
+      disease_train.append(f)
+    # End disease loop
+  # Write the disease class test list.
+  print("%s: %d Testing, %d Training"%(plants[x],len(disease_test),len(disease_train)))
+  writer(disease_test,save_dir + '%s-Test.tfrecords'%plants[x])
+  # Write the disease class train list.
+  writer(disease_train,save_dir + '%s-Train.tfrecords'%plants[x])
 
-# Shuffle the list of tuples
-shuffle(img_lab)
+  #Append to the running lists for plant test+train
+  plant_test.append(disease_test)
+  plant_train.append(disease_train)
 
-# Examples
-ex = len(img_lab)
-print("Found %d examples."%ex)
-test  = ex // 7
-train = ex // 3
-
-writer(img_lab[:train],save_dir + 'PlantVision-Test.tfrecords')
-writer(img_lab[train:],save_dir + 'PlantVision-Train.tfrecords')
+# Write the plant test list
+writer(plant_test,save_dir  + 'PlantVision-Test.tfrecords')
+# Write the plant train list
+writer(plant_train,save_dir + 'PlantVision-Train.tfrecords')
