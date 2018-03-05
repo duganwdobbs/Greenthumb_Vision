@@ -39,7 +39,7 @@ flags.DEFINE_string ('train_dir'  , FLAGS.base_dir                 ,'Location of
 flags.DEFINE_string ('ckpt_name'  ,'greenthumb.ckpt'               ,'Checkpoint name')
 flags.DEFINE_string ('net_name'   ,'PlantVision'                   ,'Network name')
 
-plants   = [ 'Apple','Cherry','Corn','Grape','Peach','Strawberry','Bell Pepper','Potato','Tomato']
+plants   = [ 'Apple','Cherry','Corn','Grape','Peach','Strawberry','Bell_Pepper','Potato','Tomato']
 
 def trainer(global_step,loss,train_vars,fancy = True,learning_rate = .001):
   update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -47,7 +47,7 @@ def trainer(global_step,loss,train_vars,fancy = True,learning_rate = .001):
     with tf.variable_scope("Optimizer") as scope:
       if fancy:
         learning_rate = tf.train.exponential_decay(learning_rate, global_step,
-                                                   7500, 0.85, staircase=True)
+                                                   2500, 0.85, staircase=True)
         tf.summary.scalar("Learning_Rate",learning_rate)
 
       optomizer = tf.train.AdamOptimizer(learning_rate,epsilon = 1e-5)
@@ -114,7 +114,9 @@ def inference(images,training,name,trainable = True):
       # Theoretically, the network will be 8x8x128, for 8192 neurons in the first
       #    fully connected network.
       net = util.squish_to_batch(net)
+      net = tf.layers.dropout(net,.40)
       _b,neurons = net.get_shape().as_list()
+      input(neurons)
 
     with tf.variable_scope('Disease_Neurons') as scope:
       # Construct a number of final layers for diseases equal to the number of
@@ -169,7 +171,7 @@ def train(train_run = True, restore = False, plant_class = 0):
 
       # Build the network from images, inference, loss, and backpropogation.
       with tf.variable_scope("Net_Inputs") as scope:
-        images, p_lab, d_lab = inputs(global_step,train=train_run,batch_size=FLAGS.batch_size,num_epochs=FLAGS.num_epochs,cus_str = FLAGS.net_name)
+        images, p_lab, d_lab, FLAGS.train_steps = inputs(global_step,train=train_run,batch_size=FLAGS.batch_size,num_epochs=FLAGS.num_epochs,cus_str = FLAGS.net_name)
         p_lab = tf.reshape(p_lab,[FLAGS.batch_size])
         d_lab = tf.reshape(d_lab,[FLAGS.batch_size])
 
@@ -233,9 +235,10 @@ def train(train_run = True, restore = False, plant_class = 0):
       try:
         ops = [train,summaries,metrics,p_lab,d_lab,d_log] if train_run else [train,summaries,metrics,save_imgs,p_lab,d_lab,d_log]
 
-        step = tf.train.global_step(sess,global_step)
+        step = 0
         while not coord.should_stop() and step <= FLAGS.train_steps:
-          step = tf.train.global_step(sess,global_step)
+          step = step + 1
+          net_step = tf.train.global_step(sess,global_step)
 
           # Run the network and write summaries
           if train_run:
@@ -245,8 +248,8 @@ def train(train_run = True, restore = False, plant_class = 0):
 
           # Write summaries
           if FLAGS.advanced_logging:
-            writer.add_run_metadata(run_metadata,'step%d'%step)
-          writer.add_summary(_summ_result,step)
+            writer.add_run_metadata(run_metadata,'step%d'%net_step)
+          writer.add_summary(_summ_result,net_step)
 
           #Write the cmat to a file at each step, write images if testing.
           if not train_run and step % 1000 == 0:
@@ -257,17 +260,17 @@ def train(train_run = True, restore = False, plant_class = 0):
 
           if step%100 == 0 and train_run:
             # Save some checkpoints
-            saver.save(sess,savestr,global_step = step)
-            saver.save(sess,logstr ,global_step = step)
+            saver.save(sess,savestr,global_step = net_step)
+            saver.save(sess,logstr ,global_step = net_step)
       except KeyboardInterrupt:
         if train_run:
-          saver.save(sess,savestr,global_step = step)
-          saver.save(sess,logstr ,global_step = step)
+          saver.save(sess,savestr,global_step = net_step)
+          saver.save(sess,logstr ,global_step = net_step)
       except tf.errors.OutOfRangeError:
         if train_run:
-          saver.save(sess,savestr,global_step = step)
-          saver.save(sess,logstr ,global_step = step)
-        print("Out of range error, Step: %d, intended?"%step)
+          saver.save(sess,savestr,global_step = net_step)
+          saver.save(sess,logstr ,global_step = net_step)
+        print("Out of range error, Step: %d, intended?"%net_step)
       finally:
         if train_run:
           saver.save(sess,savestr)
@@ -277,14 +280,15 @@ def train(train_run = True, restore = False, plant_class = 0):
       sess.close()
 
 def main(_):
-  plant_train_classes = [8,0,3,4,2,6]
+  plant_train_classes = [0,3,4,2,6]
   for plant_class in plant_train_classes:
-    for epoch in range(0,3):
+    for run_epoch in range(0,3):
       # Train a network for 1 epoch
-      train(train_run = True,  restore = epoch!=0, plant_class = plant_class)
+      FLAGS.batch_size = 4
+      train(train_run = True,  restore = run_epoch!=0, plant_class = plant_class)
       # Run validation
-      train(train_run = False, restore = False   , plant_class = plant_class)
-      print("Epoch %d training+validation complete"%(epoch+1))
+      train(train_run = False, restore = False       , plant_class = plant_class)
+      print("Epoch %d training+validation complete"%(run_epoch+1))
 
 if __name__ == '__main__':
   tf.app.run()

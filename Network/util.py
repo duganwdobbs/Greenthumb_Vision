@@ -31,6 +31,13 @@ def tfrecord_inspect(file):
   print("%d records in %s"%(c,file))
   input("PRESS ENTER TO CONTINUE...")
 
+def tfrecord_count_records(file):
+  c = 0
+  for record in tf.python_io.tf_record_iterator(file):
+    c += 1
+  return c
+
+
 def tfrecord_advanced_inspect(file):
   record_iterator = tf.python_io.tf_record_iterator(path=file)
 

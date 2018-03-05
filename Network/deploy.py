@@ -1,4 +1,5 @@
 import tensorflow as     tf
+import numpy      as     np
 from   PlantNet   import inference
 
 import platform
@@ -73,8 +74,7 @@ class Deploy_Network:
       saver = tf.train.Saver(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES))
       # Loading the saved model
       print("Network defined, loading from checkpoint...")
-      print(tf.train.latest_checkpoint(FLAGS.run_dir))
-      saver.restore(self.sess,tf.train.latest_checkpoint(FLAGS.run_dir))
+      saver.restore(self.sess,FLAGS.run_dir + 'model.ckpt')
       print("Network Loaded from checkpoint.")
   # end __init__
 
@@ -99,10 +99,16 @@ class Deploy_Network:
     return self.diseases[p_log][d_log]
 
   def result_verbose(self,p_logs,d_logs):
-    p_conf = p_logs[np.argmax(p_logs)] * 100
-    d_conf = d_logs[np.argamx(d_logs)] * 100
-    plant  = p_log_do_desc(np.argmax(p_logs))
-    disease= d_log_do_desc(np.argmax(d_logs))
+    p_logs = np.squeeze(p_logs)
+    d_logs = np.squeeze(d_logs)
+    p_log  = p_logs
+    p_log  = np.argmax(p_log)
+    d_log  = d_logs
+    d_log  = np.argmax(d_log)
+    p_conf = p_logs[p_log] * 100
+    d_conf = d_logs[d_log] * 100
+    plant  = self.p_log_to_desc(p_log)
+    disease= self.d_log_to_desc(p_log,d_log)
     print("We are %.2f%% certain that this is a %s plant, and %.2f%% certain that this %s has %s disease."%(p_conf,plant,d_conf,plant,disease))
 
 

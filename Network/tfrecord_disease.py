@@ -147,13 +147,17 @@ def inputs(global_step,train,batch_size,num_epochs,cus_str):
   """
   TRAIN_FILE      = '%s-Train.tfrecords'%cus_str
   VALIDATION_FILE = '%s-Test.tfrecords'%cus_str
-  filename = os.path.join(FLAGS.train_dir, TRAIN_FILE if train else VALIDATION_FILE)
-  num_epochs = FLAGS.num_epochs if train else 1
-  print('Input file: ' + filename)
-  with tf.name_scope('input'):
-    # util.tfrecord_advanced_inspect(filename)
-    filename_queue = tf.train.string_input_producer([filename], num_epochs=num_epochs)
 
+  filename = os.path.join(FLAGS.train_dir, TRAIN_FILE if train else VALIDATION_FILE)
+
+  num_epochs = FLAGS.num_epochs if train else 1
+
+  file_steps = util.tfrecord_count_records(filename) // FLAGS.batch_size
+  # util.tfrecord_advanced_inspect(filename)
+
+  print('Input file: ' + filename + " Epochs: %d Batch Size: %d Train Steps: %d"%(num_epochs,FLAGS.batch_size,file_steps))
+  with tf.name_scope('input'):
+    filename_queue = tf.train.string_input_producer([filename], num_epochs=num_epochs)
     image, p_label, d_label = read_decode(filename_queue)
 
     if train:
@@ -165,4 +169,4 @@ def inputs(global_step,train,batch_size,num_epochs,cus_str):
         images, p_label, d_label = tf.train.batch(
             [image, p_label, d_label], batch_size=FLAGS.batch_size, num_threads=2,
             capacity=10 + 2 * FLAGS.batch_size)
-    return images, p_label, d_label
+    return images, p_label, d_label, file_steps
