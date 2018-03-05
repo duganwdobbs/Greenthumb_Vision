@@ -97,22 +97,19 @@ def inference(images,training,name,trainable = True):
 
       net = ops.inception_block_b(net,training,trainable,name='inception_block_b_1')
       net = ops.inception_block_b(net,training,trainable,name='inception_block_b_2')
+      net = ops.dense_reduction(net,training,filters =24, kernel = 3, stride = 2,
+                                activation=tf.nn.leaky_relu,trainable=trainable,
+                                name = 'Dense_Block_7')
 
       # Commenting out for proof of concept
-      # net = ops.inception_block_c(net,training,trainable,name='inception_block_c_1')
-      # net = ops.inception_block_c(net,training,trainable,name='inception_block_c_1')
-
-      # We're leaving the frequency domain in order to preform fully connected
-      #    inferences. Fully connected inferences do not work with imaginary
-      #    numbers. The error would always have an i/j term that will not be able
-      #    to generate a correct gradient for.
-
-      # net = tf.ifft2d(net)
+      net = ops.inception_block_c(net,training,trainable,name='inception_block_c_1')
+      net = ops.inception_block_c(net,training,trainable,name='inception_block_c_2')
 
       # Theoretically, the network will be 8x8x128, for 8192 neurons in the first
       #    fully connected network.
       net = util.squish_to_batch(net)
       _b,neurons = net.get_shape().as_list()
+      input(net)
 
     with tf.variable_scope('Plant_Neurons') as scope:
 
