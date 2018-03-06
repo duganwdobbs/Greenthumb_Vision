@@ -151,8 +151,8 @@ def inputs(global_step,train,batch_size,num_epochs):
   filename = os.path.join(FLAGS.train_dir, TRAIN_FILE if train else VALIDATION_FILE)
   num_epochs = FLAGS.num_epochs if train else 1
   print('Input file: ' + filename)
+  # util.tfrecord_advanced_inspect(filename)
   with tf.name_scope('input'):
-    # util.tfrecord_advanced_inspect(filename)
     filename_queue = tf.train.string_input_producer([filename], num_epochs=num_epochs)
 
     image, p_label, d_label = read_decode(filename_queue)

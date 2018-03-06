@@ -29,14 +29,14 @@ elif platform.system() == 'Linux':
 
 plants   = [ 'Apple','Cherry','Corn','Grape','Peach','Strawberry','Bell Pepper','Potato','Tomato']
 diseases = [
-            ['Healthy','Scab','Black Rot','Cedar Apple Rust'],
-            ['Healthy','Powdery Mildew'],
-            ['Healthy','Cercospora Leaf Spot','Common Rust','Northern Leaf Blight'],
-            ['Healthy','Black Rot,Esca (Black Measles)','Leaf Blight'],
-            ['Healthy','Bacterial Spot'],
-            ['Healthy','Leaf Scorch'],
-            ['Healthy','Bacterial Spot'],
-            ['Healthy','Early Blight','Late Blight,Leaf Scorch'],
+            ['Healthy','Scab','Black Rot','Cedar Apple Rust'],                      # Apple
+            ['Healthy','Powdery Mildew'],                                           # Cherry
+            ['Healthy','Cercospora Leaf Spot','Common Rust','Northern Leaf Blight'],# Corn
+            ['Healthy','Black Rot','Esca (Black Measles)','Leaf Blight'],           # Grape
+            ['Healthy','Bacterial Spot'],                                           # Peach
+            ['Healthy','Leaf Scorch'],                                              # Strawbery
+            ['Healthy','Bacterial Spot'],                                           # Bell Pepper
+            ['Healthy','Early Blight','Late Blight,Leaf Scorch'],                   # Potato
             ['Healthy','Bacterial Spot','Early Blight','Late Blight','Leaf Mold','Septoria Leaf Spot','Spider Mite','Target Spot','Mosaic Virus','Yellow Leaf Curl Virus']
               ]
 director = [
@@ -67,6 +67,7 @@ for x in range(len(plants)):
     file_list = filetools.find_files(base_dir + '/' + director[x][y] + '/',img_ext)
     # Create image / label tuples
     img_lab_l = [(base_dir + '/' + director[x][y] + '/' + f, x, y) for f in file_list]
+    # print("%s %s has %d examples..."%(plants[x],diseases[x][y],len(file_list)))
     # Determine the number of testing examples
     test_len  = len(file_list) * 3 // 10
     # Create a test list
@@ -82,10 +83,10 @@ for x in range(len(plants)):
   # Write the disease class test list.
   print("%s: %d Testing, %d Training"%(plants[x],len(disease_test),len(disease_train)))
   shuffle(disease_test)
-  # writer(disease_test,save_dir + '%s-Test.tfrecords'%plants[x])
+  writer(disease_test,save_dir + '%s-Test.tfrecords'%plants[x])
   # Write the disease class train list.
   shuffle(disease_train)
-  # writer(disease_train,save_dir + '%s-Train.tfrecords'%plants[x])
+  writer(disease_train,save_dir + '%s-Train.tfrecords'%plants[x])
 
   #Append to the running lists for plant test+train
   for f in disease_test:
@@ -96,7 +97,7 @@ for x in range(len(plants)):
 print("%s: %d Testing, %d Training"%("Full Data Split",len(plant_test),len(plant_train)))
 # Write the plant test list
 shuffle(plant_test)
-# writer(plant_test,save_dir  + 'PlantVision-Test.tfrecords')
+writer(plant_test,save_dir  + 'PlantVision-Test.tfrecords')
 # Write the plant train list
 shuffle(plant_train)
-# writer(plant_train,save_dir + 'PlantVision-Train.tfrecords')
+writer(plant_train,save_dir + 'PlantVision-Train.tfrecords')

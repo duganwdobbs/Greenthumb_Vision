@@ -1,0 +1,2 @@
+model_checkpoint_path: "F:/Greenthumb_Vision/network_log/tensorlogs/26_Feb_2018_21_00_TEST/model.ckpt"
+all_model_checkpoint_paths: "F:/Greenthumb_Vision/network_log/tensorlogs/26_Feb_2018_21_00_TEST/model.ckpt"

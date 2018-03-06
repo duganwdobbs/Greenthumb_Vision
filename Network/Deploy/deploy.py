@@ -74,6 +74,7 @@ class Deploy_Network:
       saver = tf.train.Saver(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES))
       # Loading the saved model
       print("Network defined, loading from checkpoint...")
+      saved_directory = 'E:/Greenthumb_Vision/Network/Deploy/'
       saver.restore(self.sess,FLAGS.run_dir + 'model.ckpt')
       print("Network Loaded from checkpoint.")
   # end __init__
