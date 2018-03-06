@@ -1,6 +1,5 @@
 import tensorflow as     tf
 import numpy      as     np
-from   PlantNet   import inference
 
 import platform
 import os
@@ -14,6 +13,92 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 # Setting up parser flags
 flags = tf.app.flags
 FLAGS = flags.FLAGS
+
+# The Classification network.
+def inference(images,training,name,trainable = True):
+  ops.init_scope_vars()
+  with tf.variable_scope(name) as scope:
+    # Preform some image preprocessing
+    net = images
+    net = ops.delist(net)
+    net = tf.cast(net,tf.float32)
+    net = ops.batch_norm(net,training,trainable)
+    # net = tf.fft2d(net)
+    # If we receive image channels in a format that shouldn't be normalized,
+    #   that goes here.
+    with tf.variable_scope('Process_Network'):
+      # Run two dense reduction modules to reduce the number of parameters in
+      #   the network and for low parameter feature extraction.
+      net = ops.dense_reduction(net,training,filters = 4, kernel = 3, stride = 2,
+                                activation=tf.nn.leaky_relu,trainable=trainable,
+                                name = 'Dense_Block_1')
+      net = ops.dense_reduction(net,training,filters = 8, kernel = 3, stride = 2,
+                                activation=tf.nn.leaky_relu,trainable=trainable,
+                                name = 'Dense_Block_2')
+      net = ops.dense_reduction(net,training,filters = 4, kernel = 3, stride = 2,
+                                activation=tf.nn.leaky_relu,trainable=trainable,
+                                name = 'Dense_Block_3')
+      net = ops.dense_reduction(net,training,filters = 8, kernel = 3, stride = 2,
+                                activation=tf.nn.leaky_relu,trainable=trainable,
+                                name = 'Dense_Block_4')
+
+      # Run the network over some resnet modules, including reduction
+      #   modules in order to further reduce the parameters and have a powerful,
+      #   proven network architecture.
+      net = ops.inception_block_a(net,training,trainable,name='inception_block_a_1')
+      net = ops.dense_reduction(net,training,filters =16, kernel = 3, stride = 2,
+                                activation=tf.nn.leaky_relu,trainable=trainable,
+                                name = 'Dense_Block_5')
+
+      net = ops.inception_block_a(net,training,trainable,name='inception_block_a_2')
+      net = ops.inception_block_a(net,training,trainable,name='inception_block_a_3')
+      net = ops.dense_reduction(net,training,filters =24, kernel = 3, stride = 2,
+                                activation=tf.nn.leaky_relu,trainable=trainable,
+                                name = 'Dense_Block_6')
+
+      net = ops.inception_block_b(net,training,trainable,name='inception_block_b_1')
+      net = ops.inception_block_b(net,training,trainable,name='inception_block_b_2')
+
+      # Commenting out for proof of concept
+      # net = ops.inception_block_c(net,training,trainable,name='inception_block_c_1')
+      # net = ops.inception_block_c(net,training,trainable,name='inception_block_c_1')
+
+      # We're leaving the frequency domain in order to preform fully connected
+      #    inferences. Fully connected inferences do not work with imaginary
+      #    numbers. The error would always have an i/j term that will not be able
+      #    to generate a correct gradient for.
+
+      # net = tf.ifft2d(net)
+
+      # Theoretically, the network will be 8x8x128, for 8192 neurons in the first
+      #    fully connected network.
+      net = util.squish_to_batch(net)
+      _b,neurons = net.get_shape().as_list()
+
+    with tf.variable_scope('Plant_Neurons') as scope:
+
+      # Fully connected network with number of neurons equal to the number of
+      #    parameters in the network at this point
+      p_log = tf.layers.dense(net,neurons,name = 'Plant_Neurons')
+
+      # Fully connected layer to extract the plant classification
+      #    NOTE: This plant classification will be used to extract the proper
+      #          disease classification matrix
+      p_log = tf.layers.dense(p_log,FLAGS.num_plant_classes,name = 'Plant_Decider')
+
+    with tf.variable_scope('Disease_Neurons') as scope:
+      # Construct a number of final layers for diseases equal to the number of
+      # plants.
+      d_net = []
+      chan = tf.layers.dense(net,neurons)#, name = 'Disease_Neurons)'
+      for x in range(FLAGS.num_plant_classes):
+        d_n = tf.layers.dense(chan,FLAGS.num_disease_classes,name = 'Disease_%d_Decider'%x)
+        d_net.append(d_n)
+      d_net = tf.stack(d_net)
+      d_log = d_net
+
+    return p_log,d_log
+
 class Deploy_Network:
 
   def __init__(self):
@@ -74,7 +159,6 @@ class Deploy_Network:
       saver = tf.train.Saver(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES))
       # Loading the saved model
       print("Network defined, loading from checkpoint...")
-      saved_directory = 'E:/Greenthumb_Vision/Network/Deploy/'
       saver.restore(self.sess,FLAGS.run_dir + 'model.ckpt')
       print("Network Loaded from checkpoint.")
   # end __init__
