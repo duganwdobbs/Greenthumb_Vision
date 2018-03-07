@@ -67,7 +67,7 @@ def main(_):
     global net
     net = Deploy_Network()
     paths = sys.argv[1:]
-    print(paths[0])
+    # print(paths[0])
     if paths[0] == 'v':
       predef_images(paths)
     if paths[0] == 'i':

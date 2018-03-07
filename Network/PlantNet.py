@@ -15,6 +15,8 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 
+plants   = [ 'Apple','Cherry','Corn','Grape','Peach','Strawberry','Bell_Pepper','Potato','Tomato']
+
 if   platform.system() == 'Windows':
   flags.DEFINE_string ('base_dir'  ,'E:/Greenthumb_Vision'          ,'Base os specific DIR')
   flags.DEFINE_string ('log_dir'   ,'F:/Greenthumb_Vision'          ,'Base os specific DIR')
@@ -45,7 +47,7 @@ def trainer(global_step,loss,train_vars,fancy = True,learning_rate = .001):
     with tf.variable_scope("Optimizer") as scope:
       if fancy:
         learning_rate = tf.train.exponential_decay(learning_rate, global_step,
-                                                   2500, 0.85, staircase=True)
+                                                   4000, 0.90, staircase=True)
         tf.summary.scalar("Learning_Rate",learning_rate)
 
       optomizer = tf.train.AdamOptimizer(learning_rate,epsilon = 1e-5)
@@ -61,55 +63,54 @@ def inference(images,training,name,trainable = True):
     net = images
     net = ops.delist(net)
     net = tf.cast(net,tf.float32)
-    net = ops.batch_norm(net,training,trainable)
-    # net = tf.fft2d(net)
+    net = ops.im_norm(net)
+
     # If we receive image channels in a format that shouldn't be normalized,
     #   that goes here.
+
     with tf.variable_scope('Process_Network'):
       # Run two dense reduction modules to reduce the number of parameters in
       #   the network and for low parameter feature extraction.
-      net = ops.dense_reduction(net,training,filters = 4, kernel = 3, stride = 2,
+      net = ops.dense_reduction(net,training,filters = 4 , kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
                                 name = 'Dense_Block_1')
-      net = ops.dense_reduction(net,training,filters = 8, kernel = 3, stride = 2,
+      net = ops.dense_reduction(net,training,filters = 12, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
                                 name = 'Dense_Block_2')
-      net = ops.dense_reduction(net,training,filters = 4, kernel = 3, stride = 2,
+      net = ops.dense_reduction(net,training,filters = 16, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
                                 name = 'Dense_Block_3')
-      net = ops.dense_reduction(net,training,filters = 8, kernel = 3, stride = 2,
-                                activation=tf.nn.leaky_relu,trainable=trainable,
-                                name = 'Dense_Block_4')
 
       # Run the network over some resnet modules, including reduction
       #   modules in order to further reduce the parameters and have a powerful,
       #   proven network architecture.
       net = ops.inception_block_a(net,training,trainable,name='inception_block_a_1')
-      net = ops.dense_reduction(net,training,filters =16, kernel = 3, stride = 2,
+      net = ops.dense_reduction(net,training,filters = 20, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
-                                name = 'Dense_Block_5')
+                                name = 'Dense_Block_4')
 
       net = ops.inception_block_a(net,training,trainable,name='inception_block_a_2')
       net = ops.inception_block_a(net,training,trainable,name='inception_block_a_3')
-      net = ops.dense_reduction(net,training,filters =24, kernel = 3, stride = 2,
+      net = ops.dense_reduction(net,training,filters = 32, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
-                                name = 'Dense_Block_6')
+                                name = 'Dense_Block_5')
 
       net = ops.inception_block_b(net,training,trainable,name='inception_block_b_1')
       net = ops.inception_block_b(net,training,trainable,name='inception_block_b_2')
-      net = ops.dense_reduction(net,training,filters =24, kernel = 3, stride = 2,
+      net = ops.dense_reduction(net,training,filters = 40, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
-                                name = 'Dense_Block_7')
+                                name = 'Dense_Block_6')
 
-      # Commenting out for proof of concept
       net = ops.inception_block_c(net,training,trainable,name='inception_block_c_1')
       net = ops.inception_block_c(net,training,trainable,name='inception_block_c_2')
+      # net = ops.dense_reduction(net,training,filters = 56, kernel = 3, stride = 2,
+      #                           activation=tf.nn.leaky_relu,trainable=trainable,
+      #                           name = 'Dense_Block_7')
 
       # Theoretically, the network will be 8x8x128, for 8192 neurons in the first
       #    fully connected network.
       net = util.squish_to_batch(net)
       _b,neurons = net.get_shape().as_list()
-      # input(net)
 
     with tf.variable_scope('Plant_Neurons') as scope:
 
@@ -126,9 +127,9 @@ def inference(images,training,name,trainable = True):
       # Construct a number of final layers for diseases equal to the number of
       # plants.
       d_net = []
-      chan = tf.layers.dense(net,neurons)#, name = 'Disease_Neurons)'
+      chan = tf.layers.dense(net,neurons, name = 'Disease_Neurons')
       for x in range(FLAGS.num_plant_classes):
-        d_n = tf.layers.dense(chan,FLAGS.num_disease_classes,name = 'Disease_%d_Decider'%x)
+        d_n = tf.layers.dense(chan,FLAGS.num_disease_classes,name = '%s_Decider'%plants[x])
         d_net.append(d_n)
       d_net = tf.stack(d_net)
       d_log = d_net
@@ -207,7 +208,7 @@ def build_metrics(global_step,p_lab,d_lab,p_log,d_logs,training):
     train = tf.assign_add(global_step,1,name = 'Global_Step')
     if training:
       p_train = trainer(global_step,p_loss,p_vars,fancy = True)
-      d_train = trainer(global_step,d_loss,d_vars,fancy = True)
+      d_train = trainer(global_step,d_loss,d_vars,fancy = False)
       train   = (train,p_train,d_train)
 
   return p_log,d_log,train,metrics

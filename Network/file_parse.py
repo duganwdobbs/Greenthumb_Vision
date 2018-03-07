@@ -80,19 +80,23 @@ for x in range(len(plants)):
     for f in train_list:
       disease_train.append(f)
     # End disease loop
-  # Write the disease class test list.
-  print("%s: %d Testing, %d Training"%(plants[x],len(disease_test),len(disease_train)))
-  shuffle(disease_test)
-  writer(disease_test,save_dir + '%s-Test.tfrecords'%plants[x])
-  # Write the disease class train list.
-  shuffle(disease_train)
-  writer(disease_train,save_dir + '%s-Train.tfrecords'%plants[x])
 
-  #Append to the running lists for plant test+train
-  for f in disease_test:
-    plant_test.append(f)
-  for f in disease_train:
-    plant_train.append(f)
+  if plants[x] == 'Corn':
+    print("Not training on corn.")
+  else:
+    # Write the disease class test list.
+    print("%s: %d Testing, %d Training"%(plants[x],len(disease_test),len(disease_train)))
+    shuffle(disease_test)
+    # writer(disease_test,save_dir + '%s-Test.tfrecords'%plants[x])
+    # Write the disease class train list.
+    shuffle(disease_train)
+    # writer(disease_train,save_dir + '%s-Train.tfrecords'%plants[x])
+
+    #Append to the running lists for plant test+train
+    for f in disease_test:
+      plant_test.append(f)
+    for f in disease_train:
+      plant_train.append(f)
 
 print("%s: %d Testing, %d Training"%("Full Data Split",len(plant_test),len(plant_train)))
 # Write the plant test list

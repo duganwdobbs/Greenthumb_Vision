@@ -17,6 +17,12 @@ def delist(net):
     net = tf.concat(net,-1,name = 'cat')
   return net
 
+def im_norm(net):
+  with tf.variable_scope('Image_Normalization') as scope:
+    net = tf.cast(net,tf.float32)
+    net = net / 255 - 1
+    return net
+
 def lrelu(x):
   with tf.variable_scope('lrelu') as scope:
     if x.dtype is not tf.complex64:
@@ -347,12 +353,12 @@ def inception_block_b(net,training,trainable,name):
 
     with tf.variable_scope('Branch_3') as scope:
       chan_3 = net
-      chan_3 = bn_conv2d(chan_3,training,filters = 86,kernel = 1,stride = 1)
+      chan_3 = bn_conv2d(chan_3,training,filters = 192,kernel = 1,stride = 1)
 
     with tf.variable_scope('Branch_4') as scope:
       chan_4 = net
       chan_4 = tf.layers.average_pooling2d(chan_4,3,1,padding = 'same')
-      chan_4 = bn_conv2d(chan_4,training,filters = 64,kernel = 1,stride = 1)
+      chan_4 = bn_conv2d(chan_4,training,filters = 128,kernel = 1,stride = 1)
 
     net = [chan_1,chan_2,chan_3,chan_4]
     net = delist(net)
@@ -364,30 +370,30 @@ def inception_block_c(net,training,trainable,name):
   with tf.variable_scope(name) as scope:
     with tf.variable_scope('Branch_1') as scope:
       chan_1   = net
-      chan_1   = bn_conv2d(chan_1,training,filters = 96,kernel = 1    ,stride = 1)
-      chan_1   = bn_conv2d(chan_1,training,filters = 112,kernel = (1,3),stride = 1)
-      chan_1   = bn_conv2d(chan_1,training,filters = 128,kernel = (3,1),stride = 1)
-      chan_1_a = bn_conv2d(chan_1,training,filters = 64,kernel = (1,3),stride = 1)
-      chan_1_b = bn_conv2d(chan_1,training,filters = 64,kernel = (3,1),stride = 1)
+      chan_1   = bn_conv2d(chan_1,training,filters = 384,kernel = 1    ,stride = 1)
+      chan_1   = bn_conv2d(chan_1,training,filters = 448,kernel = (1,3),stride = 1)
+      chan_1   = bn_conv2d(chan_1,training,filters = 512,kernel = (3,1),stride = 1)
+      chan_1_a = bn_conv2d(chan_1,training,filters = 256,kernel = (1,3),stride = 1)
+      chan_1_b = bn_conv2d(chan_1,training,filters = 256,kernel = (3,1),stride = 1)
       chan_1   = [chan_1_a,chan_1_b]
       chan_1   = delist(chan_1)
 
     with tf.variable_scope('Branch_2') as scope:
       chan_2   = net
-      chan_2   = bn_conv2d(chan_2,training,filters = 96,kernel = 1    ,stride = 1)
-      chan_2_a = bn_conv2d(chan_2,training,filters = 64,kernel = (1,3),stride = 1)
-      chan_2_b = bn_conv2d(chan_2,training,filters = 64,kernel = (3,1),stride = 1)
+      chan_2   = bn_conv2d(chan_2,training,filters = 384,kernel = 1    ,stride = 1)
+      chan_2_a = bn_conv2d(chan_2,training,filters = 256,kernel = (1,3),stride = 1)
+      chan_2_b = bn_conv2d(chan_2,training,filters = 256,kernel = (3,1),stride = 1)
       chan_2   = [chan_2_a,chan_2_b]
       chan_2   = delist(chan_2)
 
     with tf.variable_scope('Branch_3') as scope:
       chan_3 = net
-      chan_3 = bn_conv2d(chan_3,training,filters = 64,kernel = 1,stride = 1)
+      chan_3 = bn_conv2d(chan_3,training,filters = 256,kernel = 1,stride = 1)
 
     with tf.variable_scope('Branch_4') as scope:
       chan_4 = net
       chan_4 = tf.layers.average_pooling2d(chan_4,3,1,padding = 'same')
-      chan_4 = bn_conv2d(chan_4,training,filters = 64,kernel = 1,stride = 1)
+      chan_4 = bn_conv2d(chan_4,training,filters = 256,kernel = 1,stride = 1)
 
     net = [chan_1,chan_2,chan_3,chan_4]
     net = delist(net)

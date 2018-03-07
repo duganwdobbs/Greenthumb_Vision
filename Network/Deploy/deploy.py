@@ -14,6 +14,30 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 
+if   platform.system() == 'Windows':
+  flags.DEFINE_string ('base_dir'  ,'E:/Greenthumb_Vision'          ,'Base os specific DIR')
+  flags.DEFINE_string ('log_dir'   ,'F:/Greenthumb_Vision'          ,'Base os specific DIR')
+elif platform.system() == 'Linux':
+  flags.DEFINE_string ('base_dir'  ,'/home/ddobbs/Greenthumb_Vision/','Base os specific DIR')
+
+flags.DEFINE_boolean('l2_loss'            ,True  ,'If we use l2 regularization')
+flags.DEFINE_boolean('batch_norm'         ,True  ,'If we use batch normalization')
+flags.DEFINE_boolean('advanced_logging'   ,False ,'If we log metadata and histograms')
+flags.DEFINE_boolean('log_imgs'           ,False ,'If we log images to tfrecord')
+
+
+flags.DEFINE_integer('num_epochs'         ,1     ,'Number of epochs to run trainer.')
+flags.DEFINE_integer('batch_size'         ,4     ,'Batch size for training.')
+flags.DEFINE_integer('train_steps'        ,100000,'Number of steps for training on counting')
+flags.DEFINE_integer('num_plant_classes'  ,10    ,'# Classes')
+flags.DEFINE_integer('num_disease_classes',10    ,'# Classes')
+
+
+flags.DEFINE_string ('run_dir'    , FLAGS.log_dir + '/network_log/','Location to store the Tensorboard Output')
+flags.DEFINE_string ('train_dir'  , FLAGS.base_dir                 ,'Location of the tfrecord files.')
+flags.DEFINE_string ('ckpt_name'  ,'greenthumb.ckpt'               ,'Checkpoint name')
+flags.DEFINE_string ('net_name'   ,'PlantVision'                   ,'Network name')
+
 # The Classification network.
 def inference(images,training,name,trainable = True):
   ops.init_scope_vars()
