@@ -32,7 +32,7 @@ flags.DEFINE_boolean('log_imgs'           ,False ,'If we log images to tfrecord'
 flags.DEFINE_integer('num_epochs'         ,1     ,'Number of epochs to run trainer.')
 flags.DEFINE_integer('batch_size'         ,4     ,'Batch size for training.')
 flags.DEFINE_integer('train_steps'        ,100000,'Number of steps for training on counting')
-flags.DEFINE_integer('num_plant_classes'  ,10    ,'# Classes')
+flags.DEFINE_integer('num_plant_classes'  ,9     ,'# Classes')
 flags.DEFINE_integer('num_disease_classes',10    ,'# Classes')
 
 
