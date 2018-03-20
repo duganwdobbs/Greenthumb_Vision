@@ -178,4 +178,18 @@ def squish_to_batch(net):
   net = tf.reshape(net,[batch,input_height*input_width*channels])
   return net
 
+def tf_equalize_histogram(image):
+  values_range = tf.constant([0., 255.], dtype = tf.float32)
+  histogram = tf.histogram_fixed_width(tf.to_float(image), values_range, 256)
+  cdf = tf.cumsum(histogram)
+  cdf_min = cdf[tf.reduce_min(tf.where(tf.greater(cdf, 0)))]
+
+  img_shape = tf.shape(image)
+  pix_cnt = img_shape[-3] * img_shape[-2]
+  px_map = tf.round(tf.to_float(cdf - cdf_min) * 255. / tf.to_float(pix_cnt - 1))
+  px_map = tf.cast(px_map, tf.uint8)
+
+  eq_hist = tf.expand_dims(tf.gather_nd(px_map, tf.cast(image, tf.int32)), 2)
+  return eq_hist
+
 # print(s_factors(100))

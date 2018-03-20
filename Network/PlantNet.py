@@ -23,7 +23,7 @@ if   platform.system() == 'Windows':
 elif platform.system() == 'Linux':
   flags.DEFINE_string ('base_dir'  ,'/home/ddobbs/Greenthumb_Vision/','Base os specific DIR')
 
-flags.DEFINE_boolean('l2_loss'            ,True  ,'If we use l2 regularization')
+flags.DEFINE_boolean('l2_loss'            ,False ,'If we use l2 regularization')
 flags.DEFINE_boolean('batch_norm'         ,True  ,'If we use batch normalization')
 flags.DEFINE_boolean('advanced_logging'   ,False ,'If we log metadata and histograms')
 flags.DEFINE_boolean('log_imgs'           ,False ,'If we log images to tfrecord')
@@ -77,9 +77,9 @@ def inference(images,training,name,trainable = True):
       net = ops.dense_reduction(net,training,filters = 12, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
                                 name = 'Dense_Block_2')
-      net = ops.dense_reduction(net,training,filters = 16, kernel = 3, stride = 2,
-                                activation=tf.nn.leaky_relu,trainable=trainable,
-                                name = 'Dense_Block_3')
+      # net = ops.dense_reduction(net,training,filters = 16, kernel = 3, stride = 2,
+      #                           activation=tf.nn.leaky_relu,trainable=trainable,
+      #                           name = 'Dense_Block_3')
 
       # Run the network over some resnet modules, including reduction
       #   modules in order to further reduce the parameters and have a powerful,
@@ -87,19 +87,19 @@ def inference(images,training,name,trainable = True):
       net = ops.inception_block_a(net,training,trainable,name='inception_block_a_1')
       net = ops.dense_reduction(net,training,filters = 20, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
-                                name = 'Dense_Block_4')
+                                name = 'Dense_Redux_4')
 
       net = ops.inception_block_a(net,training,trainable,name='inception_block_a_2')
       net = ops.inception_block_a(net,training,trainable,name='inception_block_a_3')
       net = ops.dense_reduction(net,training,filters = 32, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
-                                name = 'Dense_Block_5')
+                                name = 'Dense_Redux_5')
 
       net = ops.inception_block_b(net,training,trainable,name='inception_block_b_1')
       net = ops.inception_block_b(net,training,trainable,name='inception_block_b_2')
       net = ops.dense_reduction(net,training,filters = 40, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
-                                name = 'Dense_Block_6')
+                                name = 'Dense_Redux_6')
 
       net = ops.inception_block_c(net,training,trainable,name='inception_block_c_1')
       net = ops.inception_block_c(net,training,trainable,name='inception_block_c_2')
@@ -107,32 +107,23 @@ def inference(images,training,name,trainable = True):
       #                           activation=tf.nn.leaky_relu,trainable=trainable,
       #                           name = 'Dense_Block_7')
 
-      # Theoretically, the network will be 8x8x128, for 8192 neurons in the first
-      #    fully connected network.
-      net = util.squish_to_batch(net)
-      _b,neurons = net.get_shape().as_list()
+      _b,height,width,neurons = net.get_shape().as_list()
 
     with tf.variable_scope('Plant_Neurons') as scope:
-
-      # Fully connected network with number of neurons equal to the number of
-      #    parameters in the network at this point
-      p_log = tf.layers.dense(net,neurons,name = 'Plant_Neurons')
-
-      # Fully connected layer to extract the plant classification
-      #    NOTE: This plant classification will be used to extract the proper
-      #          disease classification matrix
-      p_log = tf.layers.dense(p_log,FLAGS.num_plant_classes,name = 'Plant_Decider')
-
+      p_log = ops.bn_conv2d(net,training = training,filters = FLAGS.num_plant_classes,kernel = (height,width),
+                            activation = None, padding = 'VALID', trainable = trainable, name = 'PlantDecider')
+      p_log = tf.squeeze(p_log)
     with tf.variable_scope('Disease_Neurons') as scope:
       # Construct a number of final layers for diseases equal to the number of
       # plants.
-      d_net = []
-      chan = tf.layers.dense(net,neurons, name = 'Disease_Neurons')
+      d_log = []
       for x in range(FLAGS.num_plant_classes):
-        d_n = tf.layers.dense(chan,FLAGS.num_disease_classes,name = '%s_Decider'%plants[x])
-        d_net.append(d_n)
-      d_net = tf.stack(d_net)
-      d_log = d_net
+        d_n = ops.bn_conv2d(net,training = training,filters = FLAGS.num_disease_classes,kernel = (height,width),
+                              activation = None, padding = 'VALID', trainable = trainable, name = '%s_Decider'%(plants[x]))
+        d_n = tf.squeeze(d_n)
+        d_log.append(d_n)
+      with tf.variable_scope('DieaseFormatting') as scope:
+        d_log = tf.stack(d_log)
 
     return p_log,d_log
 
@@ -224,7 +215,8 @@ def train(train_run = True, restore = False):
 
       if not train_run:
         FLAGS.batch_size = 1
-        FLAGS.num_epochs = 1
+      if train_run:
+        FLAGS.batch_size = 4
 
       # Build the network from images, inference, loss, and backpropogation.
       with tf.variable_scope("Net_Inputs") as scope:

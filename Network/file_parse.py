@@ -75,6 +75,7 @@ for x in range(len(plants)):
     # Create a train list starting from the end of the test list
     train_list= img_lab_l[test_len:         ]
     # Append these lists to the running plant list.
+    print("%s %s: %d Testing, %d Training"%(plants[x],diseases[x][y],len(test_list),len(train_list)))
     for f in test_list:
       disease_test.append(f)
     for f in train_list:
@@ -101,7 +102,7 @@ for x in range(len(plants)):
 print("%s: %d Testing, %d Training"%("Full Data Split",len(plant_test),len(plant_train)))
 # Write the plant test list
 shuffle(plant_test)
-writer(plant_test,save_dir  + 'PlantVision-Test.tfrecords')
+# writer(plant_test,save_dir  + 'PlantVision-Test.tfrecords')
 # Write the plant train list
 shuffle(plant_train)
-writer(plant_train,save_dir + 'PlantVision-Train.tfrecords')
+# writer(plant_train,save_dir + 'PlantVision-Train.tfrecords')
