@@ -125,6 +125,18 @@ def dense_block(net,training, filters = 2, kernel = 3, kmap = 5, stride = 1,
     else:
       return net
 
+def new_dense_block(net,training, filters = 4, kernel = 3, kmap = 5,
+                activation = tf.nn.relu, trainable = True,name = 'Dense_Block'):
+  with tf.variable_scoe(name) as scope:
+    padding = 'SAME'
+    net = delist(net)
+    for n in range(kmap):
+      net = batch_norm(net,training,trainable,activation)
+      out = conv2d(net,filters=filters,kernel=kernel,stride=1,activation=None,padding=padding,trainable=trainable,name = '_map_%d'%n)
+      net = tf.concat([net,out],-1,name = '%d_concat'%n)
+    return net
+
+
 def atrous_block(net,training,filters = 8,kernel = 3,dilation = 1,kmap = 2,stride = 1,activation = relu,trainable = True,name = 'Atrous_Block'):
   newnet = []
   with tf.variable_scope(name) as scope:
@@ -297,12 +309,13 @@ def count_rel_acc(labels,logits,global_step):
 
 
 def dense_reduction(net,training, filters = 2, kernel = 3, kmap = 5, stride = 1,
-                activation = lrelu, trainable = True,name = 'Dense_Block'):
+                activation = tf.nn.relu, trainable = True,name = 'Dense_Block'):
   with tf.variable_scope(name) as scope:
     net = delist(net)
     for n in range(kmap):
+      net = batch_norm(net,training,trainable,activation)
       out = bn_conv2d(net, training, filters=filters, kernel=kernel, stride=1,
-                        activation=activation, trainable=trainable, name = '_map_%d'%n)
+                        activation=None, trainable=trainable, name = '_map_%d'%n)
       net = tf.concat([net,out],-1,name = '%d_concat'%n)
     if stride is not 1:
       net = max_pool(net,stride,stride)

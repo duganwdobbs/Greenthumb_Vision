@@ -37,6 +37,7 @@ def update_all(root, image_label, cam, fps_label):
 
 
 if __name__ == '__main__':
+  
     root = tk.Tk()
     image_label = tk.Label(master=root)# label for the video frame
     image_label.pack()
