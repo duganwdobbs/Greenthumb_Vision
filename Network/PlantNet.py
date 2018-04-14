@@ -35,7 +35,7 @@ flags.DEFINE_boolean('log_imgs'           ,False ,'If we log images to tfrecord'
 
 
 flags.DEFINE_integer('num_epochs'         ,1     ,'Number of epochs to run trainer.')
-flags.DEFINE_integer('batch_size'         ,4     ,'Batch size for training.')
+flags.DEFINE_integer('batch_size'         ,6     ,'Batch size for training.')
 flags.DEFINE_integer('train_steps'        ,100000,'Number of steps for training on counting')
 flags.DEFINE_integer('num_plant_classes'  ,9     ,'# Classes')
 flags.DEFINE_integer('num_disease_classes',10    ,'# Classes')
@@ -79,10 +79,10 @@ def inference(images,training,name,trainable = True):
       net = ops.dense_reduction(net,training,filters = 4 , kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
                                 name = 'Dense_Block_1')
-      net = ops.dense_reduction(net,training,filters = 12, kernel = 3, stride = 2,
+      net = ops.dense_reduction(net,training,filters = 8, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
                                 name = 'Dense_Block_2')
-      net = ops.dense_reduction(net,training,filters = 16, kernel = 3, stride = 2,
+      net = ops.dense_reduction(net,training,filters = 12, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
                                 name = 'Dense_Block_3')
 
@@ -91,26 +91,26 @@ def inference(images,training,name,trainable = True):
       #   proven network architecture.
       net = resnetA(net)
       net = resnetA(net)
-      net = ops.dense_reduction(net,training,filters = 14, kernel = 3, stride = 2,
+      net = ops.dense_reduction(net,training,filters = 12, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
                                 name = 'Dense_Redux_4')
 
       net = resnetA(net)
       net = resnetA(net)
-      net = ops.dense_reduction(net,training,filters = 18, kernel = 3, stride = 2,
+      net = ops.dense_reduction(net,training,filters = 12, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
                                 name = 'Dense_Redux_5')
 
 
       net = resnetB(net)
       net = resnetB(net)
-      net = ops.dense_reduction(net,training,filters = 22, kernel = 3, stride = 2,
+      net = ops.dense_reduction(net,training,filters = 12, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
                                 name = 'Dense_Redux_6')
 
 
       net = resnetC(net)
-      # net = resnetC(net)
+      net = resnetC(net)
       # net = ops.dense_reduction(net,training,filters = 56, kernel = 3, stride = 2,
       #                           activation=tf.nn.leaky_relu,trainable=trainable,
       #                           name = 'Dense_Block_7')
