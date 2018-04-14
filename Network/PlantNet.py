@@ -7,6 +7,11 @@ import util
 import tensorflow    as     tf
 import spec_ops      as     stf
 
+import resnet_modules
+resnetA = resnet_modules.block35
+resnetB = resnet_modules.block17
+resnetC = resnet_modules.block8
+
 from multiprocessing import Process
 from tfrecord        import inputs
 
@@ -41,7 +46,7 @@ flags.DEFINE_string ('train_dir'  , FLAGS.base_dir                 ,'Location of
 flags.DEFINE_string ('ckpt_name'  ,'greenthumb.ckpt'               ,'Checkpoint name')
 flags.DEFINE_string ('net_name'   ,'PlantVision'                   ,'Network name')
 
-def trainer(global_step,loss,train_vars,fancy = True,learning_rate = .001):
+def trainer(global_step,loss,train_vars,fancy = True,learning_rate = .0001):
   update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
   with tf.control_dependencies(update_ops):
     with tf.variable_scope("Optimizer") as scope:
@@ -77,49 +82,52 @@ def inference(images,training,name,trainable = True):
       net = ops.dense_reduction(net,training,filters = 12, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
                                 name = 'Dense_Block_2')
-      # net = ops.dense_reduction(net,training,filters = 16, kernel = 3, stride = 2,
-      #                           activation=tf.nn.leaky_relu,trainable=trainable,
-      #                           name = 'Dense_Block_3')
+      net = ops.dense_reduction(net,training,filters = 16, kernel = 3, stride = 2,
+                                activation=tf.nn.leaky_relu,trainable=trainable,
+                                name = 'Dense_Block_3')
 
       # Run the network over some resnet modules, including reduction
       #   modules in order to further reduce the parameters and have a powerful,
       #   proven network architecture.
-      net = ops.inception_block_a(net,training,trainable,name='inception_block_a_1')
-      net = ops.dense_reduction(net,training,filters = 20, kernel = 3, stride = 2,
+      net = resnetA(net)
+      net = resnetA(net)
+      net = ops.dense_reduction(net,training,filters = 14, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
                                 name = 'Dense_Redux_4')
 
-      net = ops.inception_block_a(net,training,trainable,name='inception_block_a_2')
-      net = ops.inception_block_a(net,training,trainable,name='inception_block_a_3')
-      net = ops.dense_reduction(net,training,filters = 32, kernel = 3, stride = 2,
+      net = resnetA(net)
+      net = resnetA(net)
+      net = ops.dense_reduction(net,training,filters = 18, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
                                 name = 'Dense_Redux_5')
 
-      net = ops.inception_block_b(net,training,trainable,name='inception_block_b_1')
-      net = ops.inception_block_b(net,training,trainable,name='inception_block_b_2')
-      net = ops.dense_reduction(net,training,filters = 40, kernel = 3, stride = 2,
+
+      net = resnetB(net)
+      net = resnetB(net)
+      net = ops.dense_reduction(net,training,filters = 22, kernel = 3, stride = 2,
                                 activation=tf.nn.leaky_relu,trainable=trainable,
                                 name = 'Dense_Redux_6')
 
-      net = ops.inception_block_c(net,training,trainable,name='inception_block_c_1')
-      net = ops.inception_block_c(net,training,trainable,name='inception_block_c_2')
+
+      net = resnetC(net)
+      # net = resnetC(net)
       # net = ops.dense_reduction(net,training,filters = 56, kernel = 3, stride = 2,
       #                           activation=tf.nn.leaky_relu,trainable=trainable,
       #                           name = 'Dense_Block_7')
 
-      _b,height,width,neurons = net.get_shape().as_list()
+      net = util.squish_to_batch(net)
+      _b,neurons = net.get_shape().as_list()
 
     with tf.variable_scope('Plant_Neurons') as scope:
-      p_log = ops.bn_conv2d(net,training = training,filters = FLAGS.num_plant_classes,kernel = (height,width),
-                            activation = None, padding = 'VALID', trainable = trainable, name = 'PlantDecider')
+      p_log = tf.layers.dense(net,neurons,name = 'Plant_Neurons')
+      p_log = tf.layers.dense(p_log,FLAGS.num_plant_classes,name = 'Plant_Decider')
       p_log = tf.squeeze(p_log)
     with tf.variable_scope('Disease_Neurons') as scope:
-      # Construct a number of final layers for diseases equal to the number of
-      # plants.
+      # Construct a number of final layers for diseases equal to the number of plants.
       d_log = []
+      chan = tf.layers.dense(net,neurons, name = 'Disease_Neurons')
       for x in range(FLAGS.num_plant_classes):
-        d_n = ops.bn_conv2d(net,training = training,filters = FLAGS.num_disease_classes,kernel = (height,width),
-                              activation = None, padding = 'VALID', trainable = trainable, name = '%s_Decider'%(plants[x]))
+        d_n = tf.layers.dense(chan,FLAGS.num_disease_classes,name = '%s_Decider'%plants[x])
         d_n = tf.squeeze(d_n)
         d_log.append(d_n)
       with tf.variable_scope('DieaseFormatting') as scope:
@@ -164,6 +172,7 @@ def build_metrics(global_step,p_lab,d_lab,p_log,d_logs,training):
     size = [1,1,FLAGS.num_disease_classes]
     # Extract the disease logit per example in batch
     d_log = []
+    d_logs = tf.reshape(d_logs,[FLAGS.num_plant_classes,FLAGS.batch_size,FLAGS.num_disease_classes])
     for x in range(FLAGS.batch_size):
       start = [index[x],x,0]
       val = tf.slice(d_logs,start,size)
@@ -180,6 +189,7 @@ def build_metrics(global_step,p_lab,d_lab,p_log,d_logs,training):
     d_vars = [var for var in tf.trainable_variables() if 'Disease_Neurons' in var.name]
 
     # Calculate the losses per network
+    p_log = tf.reshape(p_log,[FLAGS.batch_size,FLAGS.num_plant_classes])
     p_loss = ops.xentropy_loss(p_lab,p_log,p_vars,l2 = True ,name = "Plant_Loss")
     d_loss = ops.xentropy_loss(d_lab,d_log,d_vars,l2 = False,name = "Disease_Loss")
 
@@ -198,8 +208,8 @@ def build_metrics(global_step,p_lab,d_lab,p_log,d_logs,training):
   with tf.variable_scope('Trainer') as scope:
     train = tf.assign_add(global_step,1,name = 'Global_Step')
     if training:
-      p_train = trainer(global_step,p_loss,p_vars,fancy = True)
-      d_train = trainer(global_step,d_loss,d_vars,fancy = False)
+      p_train = trainer(global_step,p_loss,p_vars,fancy = True ,learning_rate = 1e-5)
+      d_train = trainer(global_step,d_loss,d_vars,fancy = False,learning_rate = 1e-4)
       train   = (train,p_train,d_train)
 
   return p_log,d_log,train,metrics

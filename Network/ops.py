@@ -19,8 +19,10 @@ def delist(net):
 
 def im_norm(net):
   with tf.variable_scope('Image_Normalization') as scope:
-    net = tf.cast(net,tf.float32)
-    net = net / 255 - 1
+    ims = []
+    for x in range(FLAGS.batch_size):
+      ims.append(tf.image.per_image_standardization(net[x,:,:,:]))
+    net = tf.stack(ims)
     return net
 
 def lrelu(x):
