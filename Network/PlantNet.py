@@ -115,14 +115,18 @@ def inference(images,training,name,trainable = True):
       #                           activation=tf.nn.leaky_relu,trainable=trainable,
       #                           name = 'Dense_Block_7')
 
-      net = util.squish_to_batch(net)
-      _b,neurons = net.get_shape().as_list()
 
     with tf.variable_scope('Plant_Neurons') as scope:
-      p_log = tf.layers.dense(net,neurons,name = 'Plant_Neurons')
+      p_net = util.squish_to_batch(net)
+      _b,neurons = net.get_shape().as_list()
+      p_log = tf.layers.dense(p_net,neurons,name = 'Plant_Neurons')
       p_log = tf.layers.dense(p_log,FLAGS.num_plant_classes,name = 'Plant_Decider')
       p_log = tf.squeeze(p_log)
     with tf.variable_scope('Disease_Neurons') as scope:
+      # A specific disease ResnetC module
+      net = resnetC(net)
+      net = util.squish_to_batch(net)
+      _b,neurons = net.get_shape().as_list()
       # Construct a number of final layers for diseases equal to the number of plants.
       d_log = []
       chan = tf.layers.dense(net,neurons, name = 'Disease_Neurons')
