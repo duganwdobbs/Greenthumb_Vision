@@ -11,7 +11,7 @@ from PIL import Image
 # Where to put your base directories.
 base_dir = ''
 if   platform.system() == 'Windows':
-  base_dir = 'E:/plantvillage/color'
+  base_dir = 'D:/Greenthumb_Vision/color'
 elif platform.system() == 'Linux':
   base_dir = '/data0/ddobbs/Cows/Cows Found'
   # /home/ddobbs/BinaLab-Semantic-Segmentation/data
@@ -27,6 +27,7 @@ elif platform.system() == 'Linux':
 # Potato      : Healthy : Early Blight : Late Blight : leaf Scorch
 # Tomato      : Healthy : Bacterial Spot : Early Blight : Late Blight: Leaf Mold : Septoria Leaf Spot : Spider Mite : Target Spot : Mosaic Virus : Yellow Leaf Curl Virus
 
+# 42 Diseases Total
 plants   = [ 'Apple','Cherry','Corn','Grape','Peach','Strawberry','Bell Pepper','Potato','Tomato']
 diseases = [
             ['Healthy','Scab','Black Rot','Cedar Apple Rust'],                      # Apple
@@ -55,6 +56,7 @@ examples = []
 
 save_dir = base_dir + '../../'
 img_ext = '.JPG'
+img_ext2 = '.jpg'
 
 plant_test  = []
 plant_train = []
@@ -65,6 +67,7 @@ for x in range(len(plants)):
     # print("%s %s"%(plants[x],diseases[x][y]))
     # Find the files that conform to given plant cat X and disease cat Y
     file_list = filetools.find_files(base_dir + '/' + director[x][y] + '/',img_ext)
+    file_list = file_list + filetools.find_files(base_dir + '/' + director[x][y] + '/',img_ext2)
     # Create image / label tuples
     img_lab_l = [(base_dir + '/' + director[x][y] + '/' + f, x, y) for f in file_list]
     # print("%s %s has %d examples..."%(plants[x],diseases[x][y],len(file_list)))
@@ -75,7 +78,7 @@ for x in range(len(plants)):
     # Create a train list starting from the end of the test list
     train_list= img_lab_l[test_len:         ]
     # Append these lists to the running plant list.
-    print("%s %s: %d Testing, %d Training"%(plants[x],diseases[x][y],len(test_list),len(train_list)))
+    print("%s & %s & %d & %d"%(plants[x],diseases[x][y],len(test_list),len(train_list)))
     for f in test_list:
       disease_test.append(f)
     for f in train_list:
@@ -86,7 +89,7 @@ for x in range(len(plants)):
     print("Not training on corn.")
   else:
     # Write the disease class test list.
-    print("%s: %d Testing, %d Training"%(plants[x],len(disease_test),len(disease_train)))
+    print("%s & Summed %d & %d "%(plants[x],len(disease_test),len(disease_train)))
     shuffle(disease_test)
     # writer(disease_test,save_dir + '%s-Test.tfrecords'%plants[x])
     # Write the disease class train list.
