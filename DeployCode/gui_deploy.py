@@ -37,7 +37,7 @@ def run_network(net,cam):
 def update_image(image_label, cam):
   (readsuccessful, img) = cam.read()
   img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-  img = cv2.resize(img,(960,540))
+  # img = cv2.resize(img,(960,540))
   imgH,imgW,imgC = img.shape
   lef_w = (imgW - 256) //2
   rig_w = lef_w + 256

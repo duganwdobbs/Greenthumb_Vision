@@ -18,7 +18,7 @@ class JuanImageTrial:
         self.juanWindow()
 
     def juanSplash(self):
-        self.chaboi = Image.open('logo.jpg')
+        self.chaboi = Image.open('logo.png')
         # cv2.imshow('img',np.asarray(self.chaboi))
         self.imgSplash = ImageTk.PhotoImage(self.chaboi)
 
