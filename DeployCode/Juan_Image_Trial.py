@@ -14,14 +14,18 @@ class JuanImageTrial:
         #self.progressbar.pack(side="bottom")
         #self.progressbar.start()
 
-        self.juanSplash()
+        self.setImage()
+        root.juanSplash()
         self.juanWindow()
-
-    def juanSplash(self):
+        
+    def setImage(self):
+        #Kept for later reference to variable
         self.chaboi = Image.open('logo.png')
-        # cv2.imshow('img',np.asarray(self.chaboi))
-        self.imgSplash = ImageTk.PhotoImage(self.chaboi)
 
+    def juanSplash(root):
+        # Trying to bypass garbage collection
+        root.imgSplash = imgSplash = ImageTk.PhotoImage(file=r'logo.png')
+        
     def juanWindow(self):
         size1, size2 = self.chaboi.size
 
@@ -31,8 +35,8 @@ class JuanImageTrial:
         self.parent.geometry("%ix%i+%i+%i" %(size1, size2,
                                              adjustedsize1,adjustedsize2))
 
-        self.label = Label(self.parent, image=self.imgSplash)
-        self.label.image = self.imgSplash
+        self.label = Label(self.parent, image=root.imgSplash)
+        self.label.image = root.imgSplash
         self.label.pack()
 
 if __name__ == '__main__':
