@@ -7,6 +7,8 @@ import numpy as np
 from SplashScreen import SplashScreen
 import webbrowser as wb
 from Juan_Image_Trial import JuanImageTrial
+from multiprocessing import Process
+from Juan_Image_Trial import loading_screen
 
 from   deploy_v2     import Deploy_Network
 
@@ -83,15 +85,13 @@ def update_all(root, image_label, cam, fps_label,net):
 
 
 if __name__ == '__main__':
-  groot = tk.Tk()
+  p = Process(target = loading_screen)
+  p.start()
 
-  # groot.overrideredirect(True)
-  splash = JuanImageTrial(groot)
-  groot.title("Loading...")
-  groot.update_idletasks()
+  groot = tk.Tk()
+  groot.withdraw()
 
   net = Deploy_Network()
-  groot.update_idletasks()
 
   # USB
   # gst_str = ("v4l2src device=/dev/video{} ! "
@@ -104,11 +104,12 @@ if __name__ == '__main__':
   #              "nvvidconv ! video/x-raw, width=(int){}, height=(int){}, format=(string)BGRx ! "
   #              "videoconvert ! appsink").format(960, 720)
   # cam = cv2.VideoCapture(gst_str, cv2.CAP_GSTREAMER)
+
   cam = cv2.VideoCapture(0)
   run_network(net,cam)
+  p.terminate()
 
   # root.destroy()
-  groot.withdraw()
 
   master = tk.Toplevel()
   master.title("Greenthumb-Vision")
@@ -134,4 +135,5 @@ if __name__ == '__main__':
 
   # setup the update callback
   master.after(0, func=lambda: update_all(master, image_label, cam, fps_label, net))
+  master.lift()
   master.mainloop()

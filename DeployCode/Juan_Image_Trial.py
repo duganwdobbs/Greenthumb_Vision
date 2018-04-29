@@ -8,11 +8,11 @@ class JuanImageTrial:
     def __init__(self, parent):
 
         self.parent = parent
-        #parent.overrideredirect(True)
+        parent.overrideredirect(True)
 
-        #self.progressbar = ttk.Progressbar(orient=HORIZONTAL, length=10000, mode='determinate')
-        #self.progressbar.pack(side="bottom")
-        #self.progressbar.start()
+        self.progressbar = ttk.Progressbar(orient=HORIZONTAL, length=10000, mode='determinate')
+        self.progressbar.pack(side="bottom")
+        self.progressbar.start()
 
         self.juanSplash()
         self.juanWindow()
@@ -34,6 +34,15 @@ class JuanImageTrial:
         self.label = Label(self.parent, image=self.imgSplash)
         self.label.image = self.imgSplash
         self.label.pack()
+
+def loading_screen():
+    root = Tk()
+    print("LOADING SCREEN!")
+    root.overrideredirect(True)
+    app = JuanImageTrial(root)
+    root.lift() 
+    root.mainloop()
+
 
 if __name__ == '__main__':
     root = Tk()
