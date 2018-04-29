@@ -135,7 +135,6 @@ if __name__ == '__main__':
 
   # setup the update callback
   master.after(0, func=lambda: update_all(master, image_label, cam, fps_label, net))
-  root.lift()
-  root.attributes('-topmost', True)
-  root.after_idle(root.attributes,'-topmost', False)
+  master.lift()
+  master.attributes('-topmost', True)
   master.mainloop()
